@@ -183,9 +183,10 @@ private fun MessageBubble(
                 }
 
                 // Message text content
-                if (!message.text.isNullOrBlank()) {
+                val bodyText = message.text
+                if (!bodyText.isNullOrBlank()) {
                     Text(
-                        text = message.text,
+                        text = bodyText,
                         fontSize = 15.sp,
                         color = textColor,
                         lineHeight = 20.sp
