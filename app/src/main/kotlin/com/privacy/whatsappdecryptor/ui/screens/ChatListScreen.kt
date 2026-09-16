@@ -149,6 +149,7 @@ fun ChatListScreen(
                 }
             }
         }
+    ) { paddingValues ->
         // Inventory Export Status Dialogs
         when (val state = inventoryExportState) {
             is com.privacy.whatsappdecryptor.ui.viewmodel.InventoryExportState.Processing -> {
@@ -416,8 +417,9 @@ private fun ChatListItem(
                     modifier = Modifier.weight(1f)
                 )
 
-                if (chat.lastMessageTimestampMs != null) {
-                    val dateText = ChatDateFormatter.format(Instant.ofEpochMilli(chat.lastMessageTimestampMs))
+                val lastTs = chat.lastMessageTimestampMs
+                if (lastTs != null) {
+                    val dateText = ChatDateFormatter.format(Instant.ofEpochMilli(lastTs))
                     Text(
                         text = dateText,
                         style = MaterialTheme.typography.bodySmall,

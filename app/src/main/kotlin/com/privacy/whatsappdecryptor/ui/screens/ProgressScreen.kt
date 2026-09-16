@@ -62,6 +62,16 @@ fun ProgressScreen(
                     }
                 }
 
+                is DecryptionProgressState.CheckingStorage -> {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                        Text("Verifying storage space...", style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+
                 is DecryptionProgressState.ReadingHeader -> {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -123,7 +133,7 @@ fun ProgressScreen(
                                     color = MaterialTheme.colorScheme.primary
                                 )
                                 Text(
-                                    text = "${StoragePreflight.formatBytes(progressState.processedBytes)} / ${StoragePreflight.formatBytes(progressState.totalBytes)}",
+                                    text = "${StoragePreflight.formatBytes(progressState.bytesProcessed)} / ${StoragePreflight.formatBytes(progressState.totalBytes)}",
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     style = MaterialTheme.typography.bodyMedium
                                 )
@@ -137,7 +147,7 @@ fun ProgressScreen(
                                 color = MaterialTheme.colorScheme.primary
                             )
                             Text(
-                                text = "Streaming chunks: ${StoragePreflight.formatBytes(progressState.processedBytes)}",
+                                text = "Streaming chunks: ${StoragePreflight.formatBytes(progressState.bytesProcessed)}",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -203,8 +213,8 @@ fun ProgressScreen(
                             fontWeight = FontWeight.Bold
                         )
 
-                        val elapsedSec = progressState.elapsedMs / 1000.0
-                        val dbSize = StoragePreflight.formatBytes(progressState.outputDatabaseFile.length())
+                        val elapsedSec = progressState.totalTimeMs / 1000.0
+                        val dbSize = StoragePreflight.formatBytes(progressState.dbFile.length())
                         Text(
                             text = "Database unpacked in %.1f seconds (%s)".format(elapsedSec, dbSize),
                             style = MaterialTheme.typography.bodyLarge,

@@ -33,7 +33,7 @@ fun SettingsScreen(
     var hasRememberedKey by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        hasRememberedKey = KeyStorageManager.hasStoredKey(context)
+        hasRememberedKey = KeyStorageManager.hasRememberedKey(context)
     }
 
     if (showPurgeDialog) {
