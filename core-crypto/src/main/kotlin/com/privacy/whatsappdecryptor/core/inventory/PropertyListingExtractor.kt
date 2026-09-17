@@ -132,7 +132,16 @@ object PropertyListingExtractor {
     }
 
     fun stripFmt(s: String): String {
-        return s.replace(Regex("[*_~`]"), "").replace(EMOJI_REGEX, " ")
+        return s.replace(Regex("[*_~`]"), "").replace(EMOJI_REGEX, " ").replace("\u0000", "")
+    }
+
+    fun safeTake(s: String, maxChars: Int): String {
+        if (s.length <= maxChars) return s
+        var take = maxChars
+        if (Character.isHighSurrogate(s[take - 1])) {
+            take--
+        }
+        return s.substring(0, take)
     }
 
     fun dealType(t: String): String {
@@ -189,7 +198,7 @@ object PropertyListingExtractor {
         out = out.replace(Regex("^(?:available\\s*(?:for\\s*\\w+)?|for)\\s+(?:sale|rent)?\\s*(?:in|at)?\\s*", RegexOption.IGNORE_CASE), "")
         out = out.replace(Regex("\\s+(?:bringing|presenting|offers?)\\b.*$", RegexOption.IGNORE_CASE), "")
         out = out.split(Regex("\\s+for\\s+(?:sale|rent)\\b", RegexOption.IGNORE_CASE))[0]
-        return pyStrip(out, " :,-|").take(60)
+        return safeTake(pyStrip(out, " :,-|").replace("\u0000", ""), 60)
     }
 
     fun location(t: String): String {
@@ -408,7 +417,7 @@ object PropertyListingExtractor {
                         contactNo = phones.take(2).joinToString(", "),
                         listingInMsg = if (parts.size > 1) "${i + 1} of ${parts.size}" else "",
                         timesPosted = times,
-                        fullMessage = part.trim().take(2000)
+                        fullMessage = safeTake(part.trim().replace("\u0000", ""), 2000)
                     )
                 )
             }

@@ -25,9 +25,14 @@ data class InventoryTotals(val rows: Int, val matched: Int)
 class StreamingInventoryStore(private val work: InventorySql, private val cache: InventorySql) : Closeable {
     companion object {
         // Bump when property extraction, project rules, or CSV field conversion change.
-        const val CACHE_VERSION = "android-inventory-v1"
+        const val CACHE_VERSION = "android-inventory-v2"
         private val NON_WORD = Regex("[^\\p{L}\\p{N}]+")
         private val NON_DIGIT = Regex("\\D")
+        private val json = Json {
+            ignoreUnknownKeys = true
+            isLenient = true
+            coerceInputValues = true
+        }
     }
     private val recent = object : LinkedHashMap<String, List<ImportantDealerRow>>(256, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<ImportantDealerRow>>?) = size > 256
@@ -47,12 +52,23 @@ class StreamingInventoryStore(private val work: InventorySql, private val cache:
         cache.execute("""CREATE TABLE IF NOT EXISTS parsed_text (
             version TEXT NOT NULL, digest TEXT NOT NULL, fields TEXT NOT NULL,
             PRIMARY KEY(version, digest)
-        ) WITHOUT ROWID""")
+        )""")
         work.execute("BEGIN")
         cache.execute("BEGIN")
     }
 
     private fun normalize(value: String) = NON_WORD.replace(Normalizer.normalize(value, Normalizer.Form.NFKC).lowercase(java.util.Locale.ROOT), "")
+
+    private fun parseAndCache(text: String, digest: String): List<ImportantDealerRow> {
+        val result = PropertyListingExtractor.extractListings(sequenceOf(RawMessage(0, "", text)))
+            .map { InventoryDeduplicator.toImportantDealerRow(it) }
+        runCatching {
+            cache.execute("INSERT OR REPLACE INTO parsed_text VALUES (?, ?, ?)",
+                listOf(CACHE_VERSION, digest, json.encodeToString(result)))
+        }
+        parsed++
+        return result
+    }
 
     private fun templates(text: String): List<ImportantDealerRow> {
         val digest = MessageDigest.getInstance("SHA-256").digest(text.toByteArray(Charsets.UTF_8))
@@ -62,17 +78,15 @@ class StreamingInventoryStore(private val work: InventorySql, private val cache:
             if (it.next()) it.text(0) else null
         }
         val rows = if (saved != null) {
-            reused++
-            Json.decodeFromString<List<ImportantDealerRow>>(saved)
+            val decoded = runCatching { json.decodeFromString<List<ImportantDealerRow>>(saved) }.getOrNull()
+            if (decoded != null) {
+                reused++
+                decoded
+            } else {
+                parseAndCache(text, digest)
+            }
         } else {
-            // Parse one distinct text at a time. Sender/time are deliberately absent
-            // from these reusable templates, including cached non-listings ([]).
-            val result = PropertyListingExtractor.extractListings(sequenceOf(RawMessage(0, "", text)))
-                .map { InventoryDeduplicator.toImportantDealerRow(it) }
-            cache.execute("INSERT OR REPLACE INTO parsed_text VALUES (?, ?, ?)",
-                listOf(CACHE_VERSION, digest, Json.encodeToString(result)))
-            parsed++
-            result
+            parseAndCache(text, digest)
         }
         recent[digest] = rows
         return rows
@@ -95,7 +109,7 @@ class StreamingInventoryStore(private val work: InventorySql, private val cache:
                 society=excluded.society, dealer=excluded.dealer, status=excluded.status, fields=excluded.fields
                 WHERE excluded.ts < listings.ts""",
                 listOf(key, message.timestampMs, extracted, row.society, row.dealerName,
-                    row.projectListStatus, Json.encodeToString(row)))
+                    row.projectListStatus, json.encodeToString(row)))
         }
         if (processed % 500 == 0) {
             work.execute("COMMIT"); work.execute("BEGIN")
@@ -104,6 +118,7 @@ class StreamingInventoryStore(private val work: InventorySql, private val cache:
     }
 
     fun prepare(): InventoryTotals {
+        work.execute("COMMIT")
         work.execute("CREATE INDEX listing_order ON listings(ts, seq)")
         work.execute("CREATE INDEX listing_latest ON listings(society, dealer, ts DESC, seq DESC)")
         return work.query("SELECT COUNT(*), COALESCE(SUM(status='IN'), 0) FROM listings") {
@@ -119,15 +134,18 @@ class StreamingInventoryStore(private val work: InventorySql, private val cache:
             ORDER BY newest.ts DESC, newest.seq DESC LIMIT 1
         ) FROM listings l ORDER BY l.ts, l.seq""") { cursor ->
             while (cursor.next()) {
-                consume(Json.decodeFromString<ImportantDealerRow>(cursor.text(0))
-                    .copy(isDuplicate = cursor.long(1) != 0L))
+                val raw = cursor.text(0)
+                val row = runCatching { json.decodeFromString<ImportantDealerRow>(raw) }.getOrNull()
+                if (row != null) {
+                    consume(row.copy(isDuplicate = cursor.long(1) != 0L))
+                }
             }
         }
     }
 
     override fun close() {
-        // Preserve the reusable text cache even when an export is cancelled.
-        try { cache.execute("COMMIT") } finally { recent.clear() }
-        // Drivers are owned by the caller; its use blocks close them on all paths.
+        try { cache.execute("COMMIT") } catch (_: Exception) {}
+        try { work.execute("COMMIT") } catch (_: Exception) {}
+        recent.clear()
     }
 }

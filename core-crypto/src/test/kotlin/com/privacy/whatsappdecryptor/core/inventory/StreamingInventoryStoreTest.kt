@@ -99,4 +99,20 @@ class StreamingInventoryStoreTest {
             assertEquals(1, output.toString("UTF-8").trim().lines().size)
         }
     }
+
+    @Test fun `corrupted cache entry is gracefully recovered without failing export`() {
+        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(text.toByteArray(Charsets.UTF_8))
+            .joinToString("") { byte -> val n = byte.toInt() and 255; "${"0123456789abcdef"[n ushr 4]}${"0123456789abcdef"[n and 15]}" }
+        runStore("corrupt") { store ->
+            Sql(directory.resolve("cache.db")).use { cache ->
+                cache.execute("INSERT OR REPLACE INTO parsed_text VALUES (?, ?, ?)",
+                    listOf(StreamingInventoryStore.CACHE_VERSION, digest, "{invalid json [10].society"))
+            }
+            store.add(RawMessage(100, "919876543210", text))
+            assertEquals(1, store.prepare().rows)
+            val rows = mutableListOf<ImportantDealerRow>()
+            store.forEachRow { rows.add(it) }
+            assertEquals(1, rows.size)
+        }
+    }
 }
