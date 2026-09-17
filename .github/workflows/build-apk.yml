@@ -46,6 +46,7 @@ jobs:
         run: |
           gh release create "v1.0.${{ github.run_number }}" \
             app/build/outputs/apk/debug/app-debug.apk \
+            --clobber \
             --title "WhatsApp Decryptor APK v1.0 (Build ${{ github.run_number }})" \
             --notes "### WhatsApp Decryptor & Real Estate Inventory Exporter
           Download \`app-debug.apk\` below and install on Android."
