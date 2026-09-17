@@ -184,8 +184,9 @@ class ChatViewModel : ViewModel() {
                     }
                 }
             } else {
-                // Timeframe not yet scanned: automatically scan and extract
-                scanProjectInventory(ctx, months = months, forceRefresh = false)
+                // Not yet scanned: do NOT auto-scan, clear list so user can tap 'Scan Projects' when ready
+                _projectSummaries.value = emptyList()
+                _inListings.value = emptyList()
             }
         }
     }

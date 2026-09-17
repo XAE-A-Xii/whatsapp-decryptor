@@ -89,11 +89,13 @@ fun ProjectInventoryScreen(
                             modifier = Modifier.fillMaxWidth()
                         )
                     } else {
-                        Column {
+                        Column(modifier = Modifier.fillMaxWidth()) {
                             Text(
                                 text = "Project Sub-Excels",
                                 fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.titleLarge
+                                style = MaterialTheme.typography.titleMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Text(
                                 text = if (projectSummaries.isNotEmpty()) {
@@ -102,7 +104,9 @@ fun ProjectInventoryScreen(
                                     "Individual property spreadsheets"
                                 },
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
