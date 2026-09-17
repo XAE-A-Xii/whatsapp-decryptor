@@ -160,8 +160,34 @@ class ChatViewModel : ViewModel() {
     }
 
     fun onProjectMonthsChanged(months: Long, context: Context? = null) {
+        if (_projectMonths.value == months) return
         _projectMonths.value = months
-        context?.let { loadInListings(it, months) }
+        context?.let { ctx ->
+            val databaseFile = (_dbState.value as? DatabaseState.Ready)?.file
+            val listingsDb = databaseFile?.let { File(it.parentFile, "active_inventory/listings_${months}m.db") }
+            if (listingsDb?.exists() == true) {
+                // If this timeframe was already scanned and cached, load it immediately into UI
+                viewModelScope.launch(Dispatchers.IO) {
+                    val cacheDb = File(databaseFile.parentFile, "inventory_cache/parsed-text.db")
+                    runCatching {
+                        AndroidInventorySql(listingsDb).use { work ->
+                            AndroidInventorySql(cacheDb).use { cache ->
+                                StreamingInventoryStore(work, cache).use { store ->
+                                    _projectSummaries.value = store.getProjectSummaries()
+                                    _inListings.value = store.getInListings(
+                                        searchQuery = _inListingsSearchQuery.value.takeIf { it.isNotBlank() },
+                                        societyFilter = _inListingsSocietyFilter.value
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Timeframe not yet scanned: automatically scan and extract
+                scanProjectInventory(ctx, months = months, forceRefresh = false)
+            }
+        }
     }
 
     fun onInListingsSearchQueryChanged(query: String, context: Context? = null) {

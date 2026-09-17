@@ -296,8 +296,36 @@ fun ProjectInventoryScreen(
                 }
             }
 
-            // Content Area: Empty State vs Projects List
-            if (projectSummaries.isEmpty() && !isScanning) {
+            // Content Area: Scanning vs Empty State vs Projects List
+            if (isScanning && projectSummaries.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        CircularProgressIndicator(
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Text(
+                            text = "Analyzing WhatsApp Messages…",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = scanProgress.ifEmpty { "Extracting and grouping property listings by project…" },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                }
+            } else if (projectSummaries.isEmpty() && !isScanning) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
