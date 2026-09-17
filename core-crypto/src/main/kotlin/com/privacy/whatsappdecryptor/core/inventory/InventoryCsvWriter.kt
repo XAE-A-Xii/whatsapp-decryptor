@@ -22,6 +22,12 @@ object InventoryCsvWriter {
         "is_duplicate"
     )
 
+    fun subExcelFileName(projectName: String, months: Long): String {
+        val sanitized = projectName.trim().replace(Regex("[^A-Za-z0-9_]+"), "_").trim('_')
+        val name = if (sanitized.isEmpty()) "Project" else sanitized
+        return "Inventory_${name}_${months}m.csv"
+    }
+
     fun singleLineCsvText(value: String?): String {
         return (value ?: "")
             .replace(Regex("\\s*(?:\\r\\n|\\r|\\n)+\\s*"), " | ")

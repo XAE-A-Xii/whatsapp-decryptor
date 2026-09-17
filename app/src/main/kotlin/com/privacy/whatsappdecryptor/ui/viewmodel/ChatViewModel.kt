@@ -26,6 +26,9 @@ import java.io.FileOutputStream
 import java.io.OutputStream
 import java.time.LocalDate
 import java.time.ZoneId
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
+import com.privacy.whatsappdecryptor.core.inventory.ProjectInventorySummary
 
 enum class ExportFormat(val label: String, val extension: String, val mimeType: String) {
     TXT("Plain Text (.txt)", "txt", "text/plain"),
@@ -78,6 +81,24 @@ class ChatViewModel : ViewModel() {
     private val _inventoryExportState = MutableStateFlow<InventoryExportState>(InventoryExportState.Idle)
     val inventoryExportState: StateFlow<InventoryExportState> = _inventoryExportState.asStateFlow()
 
+    private val _projectSummaries = MutableStateFlow<List<ProjectInventorySummary>>(emptyList())
+    val projectSummaries: StateFlow<List<ProjectInventorySummary>> = _projectSummaries.asStateFlow()
+
+    private val _projectSearchQuery = MutableStateFlow("")
+    val projectSearchQuery: StateFlow<String> = _projectSearchQuery.asStateFlow()
+
+    private val _projectStatusFilter = MutableStateFlow("ALL")
+    val projectStatusFilter: StateFlow<String> = _projectStatusFilter.asStateFlow()
+
+    private val _isProjectScanning = MutableStateFlow(false)
+    val isProjectScanning: StateFlow<Boolean> = _isProjectScanning.asStateFlow()
+
+    private val _projectScanProgress = MutableStateFlow("")
+    val projectScanProgress: StateFlow<String> = _projectScanProgress.asStateFlow()
+
+    private val _projectMonths = MutableStateFlow(1L)
+    val projectMonths: StateFlow<Long> = _projectMonths.asStateFlow()
+
     fun loadDatabase(file: File) {
         viewModelScope.launch(Dispatchers.IO) {
             _dbState.value = DatabaseState.Loading
@@ -87,10 +108,41 @@ class ChatViewModel : ViewModel() {
                 databaseSource = reader
                 _dbState.value = DatabaseState.Ready(file)
                 refreshChats()
+                loadCachedProjectSummaries(file)
             } catch (e: Exception) {
                 _dbState.value = DatabaseState.Error(e.localizedMessage ?: "Failed to open SQLite database")
             }
         }
+    }
+
+    private fun loadCachedProjectSummaries(databaseFile: File) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val listingsDb = File(databaseFile.parentFile, "active_inventory/listings_1m.db")
+            val cacheDb = File(databaseFile.parentFile, "inventory_cache/parsed-text.db")
+            if (listingsDb.exists() && cacheDb.exists()) {
+                runCatching {
+                    AndroidInventorySql(listingsDb).use { work ->
+                        AndroidInventorySql(cacheDb).use { cache ->
+                            StreamingInventoryStore(work, cache).use { store ->
+                                _projectSummaries.value = store.getProjectSummaries()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fun onProjectSearchQueryChanged(query: String) {
+        _projectSearchQuery.value = query
+    }
+
+    fun onProjectStatusFilterChanged(filter: String) {
+        _projectStatusFilter.value = filter
+    }
+
+    fun onProjectMonthsChanged(months: Long) {
+        _projectMonths.value = months
     }
 
     fun refreshChats() {
@@ -171,72 +223,229 @@ class ChatViewModel : ViewModel() {
         }
     }
 
+    private suspend fun getOrCreateActiveStore(
+        appContext: Context,
+        months: Long,
+        forceRefresh: Boolean = false,
+        onProgress: ((Int, String) -> Unit)? = null
+    ): Pair<File, File> = withContext(Dispatchers.IO) {
+        val sourceFile = (_dbState.value as? DatabaseState.Ready)?.file ?: error("Database not loaded")
+        val activeDir = File(appContext.noBackupFilesDir, "active_inventory").apply { mkdirs() }
+        val listingsDb = File(activeDir, "listings_${months}m.db")
+        val cacheDir = File(appContext.noBackupFilesDir, "inventory_cache").apply { mkdirs() }
+        val parsedCacheDb = File(cacheDir, "parsed-text.db")
+
+        if (listingsDb.exists() && !forceRefresh) {
+            return@withContext Pair(listingsDb, parsedCacheDb)
+        }
+
+        listingsDb.delete()
+        AndroidWhatsAppDatabaseReader.open(sourceFile).use { reader ->
+            val latest = reader.latestBackupTimestamp() ?: error("No messages found in this backup")
+            val cutoff = Instant.ofEpochMilli(latest).atZone(ZoneId.systemDefault())
+                .toLocalDate().minusMonths(months).withDayOfMonth(1)
+            val cutoffMs = cutoff.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+
+            AndroidInventorySql(listingsDb).use { work ->
+                AndroidInventorySql(parsedCacheDb).use { cache ->
+                    StreamingInventoryStore(work, cache).use { store ->
+                        var groupDetail = ""
+                        reader.scanInventoryMessages(cutoffMs, { done, total, name ->
+                            coroutineContext.ensureActive()
+                            groupDetail = "Groups: $done / $total • Since $cutoff\n$name"
+                            onProgress?.invoke(store.processed, groupDetail)
+                        }) { message ->
+                            coroutineContext.ensureActive()
+                            store.add(message)
+                            if (store.processed % 500 == 0) {
+                                onProgress?.invoke(
+                                    store.processed,
+                                    "$groupDetail\nListings: ${store.extracted} • Reused texts: ${store.reused}"
+                                )
+                            }
+                        }
+                        onProgress?.invoke(store.processed, "Preparing deduplicated inventory…")
+                        store.prepare()
+                        val summaries = store.getProjectSummaries()
+                        _projectSummaries.value = summaries
+                    }
+                }
+            }
+        }
+        Pair(listingsDb, parsedCacheDb)
+    }
+
+    fun scanProjectInventory(context: Context, months: Long = _projectMonths.value, forceRefresh: Boolean = false) {
+        if (inventoryJob?.isActive == true) return
+        val appContext = context.applicationContext
+        _isProjectScanning.value = true
+        _projectScanProgress.value = "Starting project scan…"
+        inventoryJob = viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val (listingsDb, parsedCacheDb) = getOrCreateActiveStore(appContext, months, forceRefresh) { processed, detail ->
+                    _projectScanProgress.value = "$detail (Messages: $processed)"
+                }
+                AndroidInventorySql(listingsDb).use { work ->
+                    AndroidInventorySql(parsedCacheDb).use { cache ->
+                        StreamingInventoryStore(work, cache).use { store ->
+                            _projectSummaries.value = store.getProjectSummaries()
+                        }
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _inventoryExportState.value = InventoryExportState.Error(e.localizedMessage ?: "Project scan failed")
+            } finally {
+                _isProjectScanning.value = false
+                _projectScanProgress.value = ""
+            }
+        }
+    }
+
+    fun exportSingleProjectSubExcel(
+        context: Context,
+        project: ProjectInventorySummary,
+        months: Long = _projectMonths.value,
+        onShareReady: (File) -> Unit
+    ) {
+        if (inventoryJob?.isActive == true) return
+        val appContext = context.applicationContext
+        inventoryJob = viewModelScope.launch(Dispatchers.IO) {
+            _inventoryExportState.value = InventoryExportState.Processing(0, "Exporting sub-excel for ${project.society}…")
+            try {
+                val (listingsDb, parsedCacheDb) = getOrCreateActiveStore(appContext, months, false)
+                val exportDir = File(appContext.cacheDir, "shared_exports").apply { mkdirs() }
+                val fileName = InventoryCsvWriter.subExcelFileName(project.society, months)
+                val exportFile = File(exportDir, fileName)
+
+                AndroidInventorySql(listingsDb).use { work ->
+                    AndroidInventorySql(parsedCacheDb).use { cache ->
+                        StreamingInventoryStore(work, cache).use { store ->
+                            FileOutputStream(exportFile).use { fos ->
+                                InventoryCsvWriter.writeCsv(fos) { emit ->
+                                    store.forEachRowForProject(project.society) { row ->
+                                        coroutineContext.ensureActive()
+                                        emit(row)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                _inventoryExportState.value = InventoryExportState.Complete(
+                    exportFile,
+                    project.totalListings,
+                    if (project.status == "IN") project.totalListings else 0
+                )
+                withContext(Dispatchers.Main) { onShareReady(exportFile) }
+            } catch (e: CancellationException) {
+                _inventoryExportState.value = InventoryExportState.Idle
+                throw e
+            } catch (e: Exception) {
+                _inventoryExportState.value = InventoryExportState.Error(e.localizedMessage ?: "Failed to export project sub-excel")
+            }
+        }
+    }
+
+    fun exportAllProjectsZip(
+        context: Context,
+        months: Long = _projectMonths.value,
+        onShareReady: (File) -> Unit
+    ) {
+        if (inventoryJob?.isActive == true) return
+        val appContext = context.applicationContext
+        inventoryJob = viewModelScope.launch(Dispatchers.IO) {
+            _inventoryExportState.value = InventoryExportState.Processing(0, "Packaging all project sub-excels into ZIP…")
+            try {
+                val (listingsDb, parsedCacheDb) = getOrCreateActiveStore(appContext, months, false)
+                val exportDir = File(appContext.cacheDir, "shared_exports").apply { mkdirs() }
+                val zipFile = File(exportDir, "All_Projects_SubExcels_${LocalDate.now()}_${months}m.zip")
+
+                AndroidInventorySql(listingsDb).use { work ->
+                    AndroidInventorySql(parsedCacheDb).use { cache ->
+                        StreamingInventoryStore(work, cache).use { store ->
+                            val summaries = store.getProjectSummaries()
+                            ZipOutputStream(FileOutputStream(zipFile)).use { zos ->
+                                summaries.forEachIndexed { index, proj ->
+                                    coroutineContext.ensureActive()
+                                    _inventoryExportState.value = InventoryExportState.Processing(
+                                        index, "Adding ${proj.society} (${index + 1}/${summaries.size}) to ZIP…"
+                                    )
+                                    val entry = ZipEntry(InventoryCsvWriter.subExcelFileName(proj.society, months))
+                                    zos.putNextEntry(entry)
+                                    InventoryCsvWriter.writeCsv(zos) { emit ->
+                                        store.forEachRowForProject(proj.society) { row ->
+                                            emit(row)
+                                        }
+                                    }
+                                    zos.closeEntry()
+                                }
+                            }
+                            _inventoryExportState.value = InventoryExportState.Complete(
+                                zipFile,
+                                summaries.size,
+                                summaries.count { it.status == "IN" }
+                            )
+                        }
+                    }
+                }
+                withContext(Dispatchers.Main) { onShareReady(zipFile) }
+            } catch (e: CancellationException) {
+                _inventoryExportState.value = InventoryExportState.Idle
+                throw e
+            } catch (e: Exception) {
+                _inventoryExportState.value = InventoryExportState.Error(e.localizedMessage ?: "Failed to export ZIP package")
+            }
+        }
+    }
+
     fun exportMasterPropertyInventory(context: Context, months: Long = 1, onShareReady: (File) -> Unit) {
-        val sourceFile = (_dbState.value as? DatabaseState.Ready)?.file ?: return
         if (inventoryJob?.isActive == true) return
         require(months > 0)
         val appContext = context.applicationContext
         inventoryJob = viewModelScope.launch(Dispatchers.IO) {
             _inventoryExportState.value = InventoryExportState.Processing(0)
-            val scratch = File(appContext.cacheDir, "inventory-work-${java.util.UUID.randomUUID()}")
             try {
-                check(scratch.mkdirs()) { "Cannot create export working directory" }
-                // A dedicated reader cannot be closed by chat navigation or refresh.
-                AndroidWhatsAppDatabaseReader.open(sourceFile).use { reader ->
-                    val latest = reader.latestBackupTimestamp() ?: error("No messages found in this backup")
-                    val cutoff = Instant.ofEpochMilli(latest).atZone(ZoneId.systemDefault())
-                        .toLocalDate().minusMonths(months).withDayOfMonth(1)
-                    val cutoffMs = cutoff.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-                    val cacheDir = File(appContext.noBackupFilesDir, "inventory_cache").apply { mkdirs() }
-                    val exportDir = File(appContext.cacheDir, "shared_exports").apply { mkdirs() }
-                    val exportFile = File(exportDir, "Master Important Dealer Inventory ${LocalDate.now()} ${months}m.csv")
-                    val staged = File(scratch, "inventory.csv")
-                    AndroidInventorySql(File(scratch, "listings.db")).use { work ->
-                        AndroidInventorySql(File(cacheDir, "parsed-text.db")).use { cache ->
-                            StreamingInventoryStore(work, cache).use { store ->
-                                var groupDetail = ""
-                                reader.scanInventoryMessages(cutoffMs, { done, total, name ->
-                                    coroutineContext.ensureActive()
-                                    groupDetail = "Groups: $done / $total • Since $cutoff\n$name"
-                                    _inventoryExportState.value = InventoryExportState.Processing(store.processed, groupDetail)
-                                }) { message ->
-                                    coroutineContext.ensureActive()
-                                    store.add(message)
-                                    if (store.processed % 500 == 0) {
-                                        _inventoryExportState.value = InventoryExportState.Processing(store.processed,
-                                            "$groupDetail\nListings: ${store.extracted} • Reused texts: ${store.reused}")
-                                    }
-                                }
-                                _inventoryExportState.value = InventoryExportState.Processing(store.processed, "Preparing deduplicated inventory…")
-                                val totals = store.prepare()
-                                var written = 0
-                                FileOutputStream(staged).use { output ->
-                                    InventoryCsvWriter.writeCsv(output) { emit ->
-                                        store.forEachRow { row ->
-                                            coroutineContext.ensureActive()
-                                            emit(row)
-                                            written++
-                                            if (written % 500 == 0) _inventoryExportState.value = InventoryExportState.Processing(
-                                                store.processed, "Writing CSV: $written / ${totals.rows} rows")
+                val (listingsDb, parsedCacheDb) = getOrCreateActiveStore(appContext, months, false) { processed, detail ->
+                    _inventoryExportState.value = InventoryExportState.Processing(processed, detail)
+                }
+                val exportDir = File(appContext.cacheDir, "shared_exports").apply { mkdirs() }
+                val exportFile = File(exportDir, "Master Important Dealer Inventory ${LocalDate.now()} ${months}m.csv")
+                val staged = File(appContext.cacheDir, "master_inventory_staged.csv")
+
+                AndroidInventorySql(listingsDb).use { work ->
+                    AndroidInventorySql(parsedCacheDb).use { cache ->
+                        StreamingInventoryStore(work, cache).use { store ->
+                            val summaries = store.getProjectSummaries()
+                            _projectSummaries.value = summaries
+                            var written = 0
+                            FileOutputStream(staged).use { output ->
+                                InventoryCsvWriter.writeCsv(output) { emit ->
+                                    store.forEachRow { row ->
+                                        coroutineContext.ensureActive()
+                                        emit(row)
+                                        written++
+                                        if (written % 500 == 0) {
+                                            _inventoryExportState.value = InventoryExportState.Processing(
+                                                written, "Writing Master CSV: $written rows"
+                                            )
                                         }
                                     }
                                 }
-                                coroutineContext.ensureActive()
-                                java.nio.file.Files.move(staged.toPath(), exportFile.toPath(),
-                                    java.nio.file.StandardCopyOption.REPLACE_EXISTING)
-                                _inventoryExportState.value = InventoryExportState.Complete(exportFile, totals.rows, totals.matched)
                             }
+                            java.nio.file.Files.move(staged.toPath(), exportFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                            val targetIn = summaries.filter { it.status == "IN" }.sumOf { it.totalListings }
+                            _inventoryExportState.value = InventoryExportState.Complete(exportFile, written, targetIn)
                         }
                     }
-                    withContext(Dispatchers.Main) { onShareReady(exportFile) }
                 }
+                withContext(Dispatchers.Main) { onShareReady(exportFile) }
             } catch (e: CancellationException) {
                 _inventoryExportState.value = InventoryExportState.Idle
                 throw e
             } catch (e: Exception) {
                 _inventoryExportState.value = InventoryExportState.Error(e.localizedMessage ?: "Failed to export property inventory")
-            } finally {
-                scratch.deleteRecursively()
             }
         }
     }
@@ -248,6 +457,7 @@ class ChatViewModel : ViewModel() {
     fun purgeDecryptedData(databaseFile: File): Boolean {
         if (inventoryJob?.isActive == true) return false
         File(databaseFile.parentFile, "inventory_cache").deleteRecursively()
+        File(databaseFile.parentFile, "active_inventory").deleteRecursively()
         databaseSource?.close()
         databaseSource = null
         _dbState.value = DatabaseState.Closed
@@ -255,10 +465,10 @@ class ChatViewModel : ViewModel() {
         _messages.value = emptyList()
         _selectedChat.value = null
         _selectedChatIdsForExport.value = emptySet()
+        _projectSummaries.value = emptyList()
 
         return try {
             if (databaseFile.exists()) {
-                // Overwrite with zeroes before deleting if possible, or standard delete
                 databaseFile.delete()
             } else true
         } catch (_: Exception) {

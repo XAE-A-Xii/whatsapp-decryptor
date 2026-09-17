@@ -115,4 +115,40 @@ class StreamingInventoryStoreTest {
             assertEquals(1, rows.size)
         }
     }
+
+    @Test fun `project summaries and single project streaming export properly`() {
+        val text1 = "M3M Capital\nAvailable for sale\n3 BHK\n1800 sqft\n2.5 cr"
+        val text2 = "Smart World DXP\nFresh unit\n4 BHK\n2800 sqft\n4.2 cr"
+        val text3 = "Random Unregistered Society\n2 BHK\n900 sqft\n1.1 cr"
+
+        runStore("projects") { store ->
+            store.add(RawMessage(100, "DealerA", text1))
+            store.add(RawMessage(200, "DealerB", text1)) // Same project, different dealer
+            store.add(RawMessage(300, "DealerC", text2)) // Target project
+            store.add(RawMessage(400, "DealerD", text3)) // Non-target (OUT)
+
+            val totals = store.prepare()
+            assertEquals(4, totals.rows)
+
+            val summaries = store.getProjectSummaries()
+            assertTrue(summaries.isNotEmpty())
+
+            // M3M Capital should have 2 listings and 2 unique dealers
+            val m3mSummary = summaries.find { it.society.contains("M3M CAPITAL", ignoreCase = true) }
+            assertNotNull(m3mSummary)
+            assertEquals("IN", m3mSummary.status)
+            assertEquals(2, m3mSummary.totalListings)
+            assertEquals(2, m3mSummary.uniqueDealers)
+
+            // Test single-project streaming
+            val m3mRows = mutableListOf<ImportantDealerRow>()
+            store.forEachRowForProject(m3mSummary.society) { m3mRows.add(it) }
+            assertEquals(2, m3mRows.size)
+            assertTrue(m3mRows.all { it.society == m3mSummary.society })
+
+            // Test filename utility
+            val fileName = InventoryCsvWriter.subExcelFileName("SMART WORLD DXP", 3)
+            assertEquals("Inventory_SMART_WORLD_DXP_3m.csv", fileName)
+        }
+    }
 }

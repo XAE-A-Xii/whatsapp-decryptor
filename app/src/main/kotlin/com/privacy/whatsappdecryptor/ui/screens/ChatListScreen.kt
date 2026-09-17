@@ -43,12 +43,12 @@ fun ChatListScreen(
     onChatClicked: (ChatSummary) -> Unit,
     onNavigateToSettings: () -> Unit,
     onExportSelected: () -> Unit,
-    onExportPropertyInventory: (Long) -> Unit,
+    onNavigateToProjects: () -> Unit = {},
+    onExportPropertyInventory: (Long) -> Unit = {},
     inventoryExportState: com.privacy.whatsappdecryptor.ui.viewmodel.InventoryExportState = com.privacy.whatsappdecryptor.ui.viewmodel.InventoryExportState.Idle,
     onDismissInventoryDialog: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    var inventoryMonths by remember { mutableStateOf(1L) }
     var isSearchActive by remember { mutableStateOf(false) }
     val isMultiSelectMode = selectedChatIds.isNotEmpty()
 
@@ -199,74 +199,60 @@ fun ChatListScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Master Property Inventory Hero Card
+            // Quick shortcut to Project Sub-Excels
             Card(
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
                 ),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(14.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                onClick = onNavigateToProjects
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Description,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(28.dp)
-                        )
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Default.Domain,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
                         Column {
                             Text(
-                                text = "Master Property Inventory",
-                                style = MaterialTheme.typography.titleMedium,
+                                text = "Project Sub-Excels",
+                                style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "All group chats • Text only",
+                                text = "Export spreadsheets for each individual project",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
-
-                    Text(
-                        text = "Extract deduplicated dealer inventory into the 12-column Excel CSV and share directly to WhatsApp.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    Icon(
+                        Icons.Default.ChevronRight,
+                        contentDescription = "Open Projects",
+                        tint = MaterialTheme.colorScheme.primary
                     )
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(1L, 3L).forEach { months ->
-                            FilterChip(
-                                selected = inventoryMonths == months,
-                                onClick = { inventoryMonths = months },
-                                label = { Text(if (months == 1L) "1 month" else "3 months") }
-                            )
-                        }
-                    }
-                    Text(if (inventoryMonths == 1L) "From the first day of the previous month in this backup." else "From the first day three months before this backup’s latest message.",
-                        style = MaterialTheme.typography.bodySmall)
-                    Button(
-                        onClick = { onExportPropertyInventory(inventoryMonths) },
-                        enabled = inventoryExportState !is com.privacy.whatsappdecryptor.ui.viewmodel.InventoryExportState.Processing,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                    ) {
-                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("⚡ Export & Share via WhatsApp", fontWeight = FontWeight.Bold)
-                    }
                 }
             }
 

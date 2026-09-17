@@ -11,11 +11,14 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.privacy.whatsappdecryptor.core.database.model.ChatSummary
@@ -26,6 +29,7 @@ import com.privacy.whatsappdecryptor.ui.theme.WhatsAppDecryptorTheme
 import com.privacy.whatsappdecryptor.ui.viewmodel.ChatViewModel
 import com.privacy.whatsappdecryptor.ui.viewmodel.DatabaseState
 import com.privacy.whatsappdecryptor.ui.viewmodel.ExportFormat
+import com.privacy.whatsappdecryptor.ui.viewmodel.InventoryExportState
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -33,6 +37,7 @@ enum class Screen {
     SETUP,
     PROGRESS,
     CHAT_LIST,
+    PROJECTS,
     CHAT_DETAIL,
     SETTINGS
 }
@@ -82,6 +87,30 @@ class MainActivity : ComponentActivity() {
                     val selectedChatIds by viewModel.selectedChatIdsForExport.collectAsStateWithLifecycle()
                     val inventoryExportState by viewModel.inventoryExportState.collectAsStateWithLifecycle()
 
+                    // Project Inventory States
+                    val projectSummaries by viewModel.projectSummaries.collectAsStateWithLifecycle()
+                    val isProjectScanning by viewModel.isProjectScanning.collectAsStateWithLifecycle()
+                    val projectScanProgress by viewModel.projectScanProgress.collectAsStateWithLifecycle()
+                    val projectSearchQuery by viewModel.projectSearchQuery.collectAsStateWithLifecycle()
+                    val projectStatusFilter by viewModel.projectStatusFilter.collectAsStateWithLifecycle()
+                    val projectMonths by viewModel.projectMonths.collectAsStateWithLifecycle()
+
+                    // Helper to share files
+                    fun shareFile(file: File, mimeType: String, subject: String, title: String) {
+                        val fileUri = androidx.core.content.FileProvider.getUriForFile(
+                            this@MainActivity,
+                            "${packageName}.fileprovider",
+                            file
+                        )
+                        val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                            type = mimeType
+                            putExtra(android.content.Intent.EXTRA_STREAM, fileUri)
+                            putExtra(android.content.Intent.EXTRA_SUBJECT, subject)
+                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        startActivity(android.content.Intent.createChooser(shareIntent, title))
+                    }
+
                     // SAF Document Creator for Exports
                     val createDocumentLauncher = rememberLauncherForActivityResult(
                         contract = ActivityResultContracts.CreateDocument(activeExportFormat.mimeType)
@@ -111,6 +140,7 @@ class MainActivity : ComponentActivity() {
                                 viewModel.clearSelectedChat()
                                 currentScreen = Screen.CHAT_LIST
                             }
+                            Screen.PROJECTS -> currentScreen = Screen.CHAT_LIST
                             Screen.CHAT_LIST -> finish()
                             Screen.PROGRESS -> {
                                 DecryptionForegroundService.cancel(this@MainActivity)
@@ -138,116 +168,231 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
-                    when (currentScreen) {
-                        Screen.SETUP -> {
-                            SetupScreen(
-                                onStartDecryption = { uri, key, _ ->
-                                    DecryptionForegroundService.start(this@MainActivity, uri, key)
-                                    currentScreen = Screen.PROGRESS
+                    // Centralized Inventory Export Dialogs (Processing, Complete, Error)
+                    when (val state = inventoryExportState) {
+                        is InventoryExportState.Processing -> {
+                            AlertDialog(
+                                onDismissRequest = {},
+                                icon = { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) },
+                                title = { Text("Processing Inventory", fontWeight = FontWeight.Bold) },
+                                text = { Text("${state.detail}\n\nProcessed: ${state.processedMessages}") },
+                                confirmButton = {}
+                            )
+                        }
+                        is InventoryExportState.Complete -> {
+                            AlertDialog(
+                                onDismissRequest = viewModel::dismissInventoryExportDialog,
+                                icon = {
+                                    Icon(
+                                        Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(36.dp)
+                                    )
+                                },
+                                title = { Text("Export Ready!", fontWeight = FontWeight.Bold) },
+                                text = {
+                                    Text("Successfully generated:\n${state.file.name}\n\nListings included: ${state.totalRows}\nOpening share menu...")
+                                },
+                                confirmButton = {
+                                    Button(onClick = viewModel::dismissInventoryExportDialog) {
+                                        Text("OK")
+                                    }
                                 }
                             )
                         }
-
-                        Screen.PROGRESS -> {
-                            ProgressScreen(
-                                progressState = progressState,
-                                onDecryptionComplete = {
-                                    val targetFile = File(noBackupFilesDir, "msgstore_decrypted.db")
-                                    viewModel.loadDatabase(targetFile)
-                                    currentScreen = Screen.CHAT_LIST
+                        is InventoryExportState.Error -> {
+                            AlertDialog(
+                                onDismissRequest = viewModel::dismissInventoryExportDialog,
+                                icon = {
+                                    Icon(
+                                        Icons.Default.Error,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
                                 },
-                                onCancel = {
-                                    currentScreen = Screen.SETUP
+                                title = { Text("Export Failed", fontWeight = FontWeight.Bold) },
+                                text = { Text(state.message) },
+                                confirmButton = {
+                                    Button(onClick = viewModel::dismissInventoryExportDialog) {
+                                        Text("Dismiss")
+                                    }
                                 }
                             )
                         }
+                        InventoryExportState.Idle -> {}
+                    }
 
-                        Screen.CHAT_LIST -> {
-                            ChatListScreen(
-                                chats = chats,
-                                searchQuery = searchQuery,
-                                onSearchQueryChanged = viewModel::onSearchQueryChanged,
-                                onlyGroups = onlyGroups,
-                                onFilterGroupsChanged = viewModel::onFilterGroupsChanged,
-                                selectedChatIds = selectedChatIds,
-                                onToggleChatSelection = viewModel::toggleChatSelection,
-                                onSelectAll = viewModel::selectAllChats,
-                                onClearSelection = viewModel::clearSelection,
-                                onChatClicked = { chat ->
-                                    viewModel.selectChat(chat)
-                                    currentScreen = Screen.CHAT_DETAIL
-                                },
-                                onNavigateToSettings = {
-                                    currentScreen = Screen.SETTINGS
-                                },
-                                onExportSelected = {
-                                    // For single selected chat in list
-                                    val firstSelectedId = selectedChatIds.firstOrNull()
-                                    val chat = chats.firstOrNull { it.id == firstSelectedId }
-                                    if (chat != null) {
-                                        exportPendingChat = chat
-                                        showExportDialog = true
-                                    }
-                                },
-                                onExportPropertyInventory = { months ->
-                                    viewModel.exportMasterPropertyInventory(this@MainActivity, months) { shareFile ->
-                                        val fileUri = androidx.core.content.FileProvider.getUriForFile(
-                                            this@MainActivity,
-                                            "${packageName}.fileprovider",
-                                            shareFile
-                                        )
-                                        val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                                            type = "text/csv"
-                                            putExtra(android.content.Intent.EXTRA_STREAM, fileUri)
-                                            putExtra(android.content.Intent.EXTRA_SUBJECT, "Master Important Dealer Inventory")
-                                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                        }
-                                        startActivity(android.content.Intent.createChooser(shareIntent, "Share Inventory to WhatsApp / Apps"))
-                                    }
-                                },
-                                inventoryExportState = inventoryExportState,
-                                onDismissInventoryDialog = viewModel::dismissInventoryExportDialog
-                            )
-                        }
+                    val isDashboard = currentScreen == Screen.CHAT_LIST || currentScreen == Screen.PROJECTS
 
-                        Screen.CHAT_DETAIL -> {
-                            val activeChat = selectedChat
-                            if (activeChat != null) {
-                                ChatDetailScreen(
-                                    chat = activeChat,
-                                    messages = messages,
-                                    isLoading = isLoadingMessages,
-                                    onBack = {
-                                        viewModel.clearSelectedChat()
-                                        currentScreen = Screen.CHAT_LIST
-                                    },
-                                    onExportChat = {
-                                        exportPendingChat = activeChat
-                                        showExportDialog = true
-                                    }
-                                )
-                            } else {
-                                currentScreen = Screen.CHAT_LIST
+                    Scaffold(
+                        bottomBar = {
+                            if (isDashboard && selectedChatIds.isEmpty()) {
+                                NavigationBar(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                ) {
+                                    NavigationBarItem(
+                                        selected = currentScreen == Screen.CHAT_LIST,
+                                        onClick = { currentScreen = Screen.CHAT_LIST },
+                                        icon = {
+                                            Icon(
+                                                Icons.Default.Chat,
+                                                contentDescription = "Chats"
+                                            )
+                                        },
+                                        label = { Text("Chats") }
+                                    )
+                                    NavigationBarItem(
+                                        selected = currentScreen == Screen.PROJECTS,
+                                        onClick = { currentScreen = Screen.PROJECTS },
+                                        icon = {
+                                            Icon(
+                                                Icons.Default.Apartment,
+                                                contentDescription = "Project Sub-Excels"
+                                            )
+                                        },
+                                        label = { Text("Project Sub-Excels") }
+                                    )
+                                }
                             }
                         }
-
-                        Screen.SETTINGS -> {
-                            SettingsScreen(
-                                decryptedFile = File(noBackupFilesDir, "msgstore_decrypted.db"),
-                                privacyModeEnabled = privacyModeEnabled,
-                                onTogglePrivacyMode = { enabled ->
-                                    privacyModeEnabled = enabled
-                                    prefs.edit().putBoolean("privacy_mode_enabled", enabled).apply()
-                                    updatePrivacyFlags(enabled)
-                                },
-                                onPurgeDecryptedData = {
-                                    viewModel.purgeDecryptedData(File(noBackupFilesDir, "msgstore_decrypted.db"))
-                                    currentScreen = Screen.SETUP
-                                },
-                                onBack = {
-                                    currentScreen = Screen.CHAT_LIST
+                    ) { innerPadding ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(innerPadding)
+                        ) {
+                            when (currentScreen) {
+                                Screen.SETUP -> {
+                                    SetupScreen(
+                                        onStartDecryption = { uri, key, _ ->
+                                            DecryptionForegroundService.start(this@MainActivity, uri, key)
+                                            currentScreen = Screen.PROGRESS
+                                        }
+                                    )
                                 }
-                            )
+
+                                Screen.PROGRESS -> {
+                                    ProgressScreen(
+                                        progressState = progressState,
+                                        onDecryptionComplete = {
+                                            val targetFile = File(noBackupFilesDir, "msgstore_decrypted.db")
+                                            viewModel.loadDatabase(targetFile)
+                                            currentScreen = Screen.CHAT_LIST
+                                        },
+                                        onCancel = {
+                                            currentScreen = Screen.SETUP
+                                        }
+                                    )
+                                }
+
+                                Screen.CHAT_LIST -> {
+                                    ChatListScreen(
+                                        chats = chats,
+                                        searchQuery = searchQuery,
+                                        onSearchQueryChanged = viewModel::onSearchQueryChanged,
+                                        onlyGroups = onlyGroups,
+                                        onFilterGroupsChanged = viewModel::onFilterGroupsChanged,
+                                        selectedChatIds = selectedChatIds,
+                                        onToggleChatSelection = viewModel::toggleChatSelection,
+                                        onSelectAll = viewModel::selectAllChats,
+                                        onClearSelection = viewModel::clearSelection,
+                                        onChatClicked = { chat ->
+                                            viewModel.selectChat(chat)
+                                            currentScreen = Screen.CHAT_DETAIL
+                                        },
+                                        onNavigateToSettings = {
+                                            currentScreen = Screen.SETTINGS
+                                        },
+                                        onNavigateToProjects = {
+                                            currentScreen = Screen.PROJECTS
+                                        },
+                                        onExportSelected = {
+                                            val firstSelectedId = selectedChatIds.firstOrNull()
+                                            val chat = chats.firstOrNull { it.id == firstSelectedId }
+                                            if (chat != null) {
+                                                exportPendingChat = chat
+                                                showExportDialog = true
+                                            }
+                                        }
+                                    )
+                                }
+
+                                Screen.PROJECTS -> {
+                                    ProjectInventoryScreen(
+                                        projectSummaries = projectSummaries,
+                                        isScanning = isProjectScanning,
+                                        scanProgress = projectScanProgress,
+                                        searchQuery = projectSearchQuery,
+                                        onSearchQueryChanged = viewModel::onProjectSearchQueryChanged,
+                                        statusFilter = projectStatusFilter,
+                                        onStatusFilterChanged = viewModel::onProjectStatusFilterChanged,
+                                        selectedMonths = projectMonths,
+                                        onMonthsChanged = viewModel::onProjectMonthsChanged,
+                                        onScanProjects = { months ->
+                                            viewModel.scanProjectInventory(this@MainActivity, months, forceRefresh = true)
+                                        },
+                                        onExportSingleProject = { proj ->
+                                            viewModel.exportSingleProjectSubExcel(this@MainActivity, proj, projectMonths) { shareFile ->
+                                                shareFile(shareFile, "text/csv", "Sub-Excel: ${proj.society}", "Share ${proj.society} Sub-Excel")
+                                            }
+                                        },
+                                        onExportAllZip = {
+                                            viewModel.exportAllProjectsZip(this@MainActivity, projectMonths) { zipFile ->
+                                                shareFile(zipFile, "application/zip", "All Project Sub-Excels", "Share All Project Sub-Excels (ZIP)")
+                                            }
+                                        },
+                                        onExportMasterCsv = {
+                                            viewModel.exportMasterPropertyInventory(this@MainActivity, projectMonths) { csvFile ->
+                                                shareFile(csvFile, "text/csv", "Master Property Inventory", "Share Master Inventory CSV")
+                                            }
+                                        },
+                                        onNavigateToSettings = {
+                                            currentScreen = Screen.SETTINGS
+                                        }
+                                    )
+                                }
+
+                                Screen.CHAT_DETAIL -> {
+                                    val activeChat = selectedChat
+                                    if (activeChat != null) {
+                                        ChatDetailScreen(
+                                            chat = activeChat,
+                                            messages = messages,
+                                            isLoading = isLoadingMessages,
+                                            onBack = {
+                                                viewModel.clearSelectedChat()
+                                                currentScreen = Screen.CHAT_LIST
+                                            },
+                                            onExportChat = {
+                                                exportPendingChat = activeChat
+                                                showExportDialog = true
+                                            }
+                                        )
+                                    } else {
+                                        currentScreen = Screen.CHAT_LIST
+                                    }
+                                }
+
+                                Screen.SETTINGS -> {
+                                    SettingsScreen(
+                                        decryptedFile = File(noBackupFilesDir, "msgstore_decrypted.db"),
+                                        privacyModeEnabled = privacyModeEnabled,
+                                        onTogglePrivacyMode = { enabled ->
+                                            privacyModeEnabled = enabled
+                                            prefs.edit().putBoolean("privacy_mode_enabled", enabled).apply()
+                                            updatePrivacyFlags(enabled)
+                                        },
+                                        onPurgeDecryptedData = {
+                                            viewModel.purgeDecryptedData(File(noBackupFilesDir, "msgstore_decrypted.db"))
+                                            currentScreen = Screen.SETUP
+                                        },
+                                        onBack = {
+                                            currentScreen = Screen.CHAT_LIST
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
                 }

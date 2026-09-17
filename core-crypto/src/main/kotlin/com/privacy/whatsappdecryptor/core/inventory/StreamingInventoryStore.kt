@@ -19,6 +19,15 @@ interface InventoryCursor {
     fun long(column: Int): Long
 }
 
+@kotlinx.serialization.Serializable
+data class ProjectInventorySummary(
+    val society: String,
+    val status: String,
+    val totalListings: Int,
+    val uniqueDealers: Int,
+    val latestTimestamp: Long
+)
+
 data class InventoryTotals(val rows: Int, val matched: Int)
 
 /** Only a bounded set of parsed texts lives in memory. All ads and sorting live on disk. */
@@ -156,6 +165,45 @@ class StreamingInventoryStore(private val work: InventorySql, private val cache:
             WHERE newest.society=l.society AND newest.dealer=l.dealer
             ORDER BY newest.ts DESC, newest.seq DESC LIMIT 1
         ) FROM listings l ORDER BY l.ts, l.seq""") { cursor ->
+            while (cursor.next()) {
+                val raw = cursor.text(0)
+                val row = runCatching { json.decodeFromString<ImportantDealerRow>(raw) }.getOrNull()
+                if (row != null) {
+                    consume(row.copy(isDuplicate = cursor.long(1) != 0L))
+                }
+            }
+        }
+    }
+
+    fun getProjectSummaries(): List<ProjectInventorySummary> {
+        return work.query("""
+            SELECT society, status, COUNT(*), COUNT(DISTINCT dealer), MAX(ts)
+            FROM listings
+            GROUP BY society, status
+            ORDER BY (status = 'IN') DESC, COUNT(*) DESC
+        """) { cursor ->
+            val list = mutableListOf<ProjectInventorySummary>()
+            while (cursor.next()) {
+                list.add(
+                    ProjectInventorySummary(
+                        society = cursor.text(0),
+                        status = cursor.text(1),
+                        totalListings = cursor.long(2).toInt(),
+                        uniqueDealers = cursor.long(3).toInt(),
+                        latestTimestamp = cursor.long(4)
+                    )
+                )
+            }
+            list
+        }
+    }
+
+    fun forEachRowForProject(society: String, consume: (ImportantDealerRow) -> Unit) {
+        work.query("""SELECT l.fields, l.seq != (
+            SELECT newest.seq FROM listings newest
+            WHERE newest.society=l.society AND newest.dealer=l.dealer
+            ORDER BY newest.ts DESC, newest.seq DESC LIMIT 1
+        ) FROM listings l WHERE l.society = ? ORDER BY l.ts, l.seq""", listOf(society)) { cursor ->
             while (cursor.next()) {
                 val raw = cursor.text(0)
                 val row = runCatching { json.decodeFromString<ImportantDealerRow>(raw) }.getOrNull()
