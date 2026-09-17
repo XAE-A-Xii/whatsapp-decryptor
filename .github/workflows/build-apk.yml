@@ -41,15 +41,11 @@ jobs:
           retention-days: 14
 
       - name: Create GitHub Release (Direct Download Link)
-        uses: softprops/action-gh-release@v2
-        with:
-          files: app/build/outputs/apk/debug/app-debug.apk
-          tag_name: v1.0.${{ github.run_number }}
-          name: WhatsApp Decryptor APK v1.0 (Build ${{ github.run_number }})
-          body: |
-            ### WhatsApp Decryptor & Real Estate Inventory Exporter
-            Download `app-debug.apk` below and install on Android.
-          draft: false
-          prerelease: false
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v1.0.${{ github.run_number }}" \
+            app/build/outputs/apk/debug/app-debug.apk \
+            --title "WhatsApp Decryptor APK v1.0 (Build ${{ github.run_number }})" \
+            --notes "### WhatsApp Decryptor & Real Estate Inventory Exporter
+          Download \`app-debug.apk\` below and install on Android."
