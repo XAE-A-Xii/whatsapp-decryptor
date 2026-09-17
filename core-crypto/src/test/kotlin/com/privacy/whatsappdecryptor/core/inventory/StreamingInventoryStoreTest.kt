@@ -150,5 +150,13 @@ class StreamingInventoryStoreTest {
             val fileName = InventoryCsvWriter.subExcelFileName("SMART WORLD DXP", 3)
             assertEquals("Inventory_SMART_WORLD_DXP_3m.csv", fileName)
         }
+
+        // Reopen same database file to ensure no "table listings already exists" error
+        runStore("projects") { store ->
+            val totals = store.prepare()
+            assertEquals(4, totals.rows)
+            val summaries = store.getProjectSummaries()
+            assertTrue(summaries.isNotEmpty())
+        }
     }
 }

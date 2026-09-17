@@ -240,6 +240,9 @@ class ChatViewModel : ViewModel() {
         }
 
         listingsDb.delete()
+        File(listingsDb.parentFile, "${listingsDb.name}-wal").delete()
+        File(listingsDb.parentFile, "${listingsDb.name}-shm").delete()
+        File(listingsDb.parentFile, "${listingsDb.name}-journal").delete()
         AndroidWhatsAppDatabaseReader.open(sourceFile).use { reader ->
             val latest = reader.latestBackupTimestamp() ?: error("No messages found in this backup")
             val cutoff = Instant.ofEpochMilli(latest).atZone(ZoneId.systemDefault())

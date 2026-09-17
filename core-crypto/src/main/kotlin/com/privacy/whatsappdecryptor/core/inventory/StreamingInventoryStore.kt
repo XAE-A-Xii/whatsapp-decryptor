@@ -54,7 +54,7 @@ class StreamingInventoryStore(private val work: InventorySql, private val cache:
     init {
         work.execute("PRAGMA temp_store=FILE")
         work.execute("PRAGMA cache_size=-8192")
-        work.execute("""CREATE TABLE listings (
+        work.execute("""CREATE TABLE IF NOT EXISTS listings (
             dedup_key TEXT PRIMARY KEY, ts INTEGER NOT NULL, seq INTEGER NOT NULL,
             society TEXT NOT NULL, dealer TEXT NOT NULL, status TEXT NOT NULL, fields TEXT NOT NULL
         )""")
@@ -151,8 +151,8 @@ class StreamingInventoryStore(private val work: InventorySql, private val cache:
 
     fun prepare(): InventoryTotals {
         work.execute("COMMIT")
-        work.execute("CREATE INDEX listing_order ON listings(ts, seq)")
-        work.execute("CREATE INDEX listing_latest ON listings(society, dealer, ts DESC, seq DESC)")
+        work.execute("CREATE INDEX IF NOT EXISTS listing_order ON listings(ts, seq)")
+        work.execute("CREATE INDEX IF NOT EXISTS listing_latest ON listings(society, dealer, ts DESC, seq DESC)")
         return work.query("SELECT COUNT(*), COALESCE(SUM(status='IN'), 0) FROM listings") {
             it.next(); InventoryTotals(it.long(0).toInt(), it.long(1).toInt())
         }
