@@ -202,22 +202,30 @@ class ChatViewModel : ViewModel() {
 
     fun loadInListings(context: Context, months: Long = _projectMonths.value) {
         val appContext = context.applicationContext
+        val databaseFile = (_dbState.value as? DatabaseState.Ready)?.file
+        val listingsDb = databaseFile?.let { File(it.parentFile, "active_inventory/listings_${months}m.db") }
+        if (listingsDb == null || !listingsDb.exists()) {
+            return
+        }
+
         viewModelScope.launch(Dispatchers.IO) {
             _isLoadingInListings.value = true
             try {
-                val (listingsDb, parsedCacheDb) = getOrCreateActiveStore(appContext, months, false)
+                val cacheDb = File(databaseFile.parentFile, "inventory_cache/parsed-text.db")
                 AndroidInventorySql(listingsDb).use { work ->
-                    AndroidInventorySql(parsedCacheDb).use { cache ->
+                    AndroidInventorySql(cacheDb).use { cache ->
                         StreamingInventoryStore(work, cache).use { store ->
-                            _inListings.value = store.getInListings(
+                            val currentIn = store.getInListings(
                                 searchQuery = _inListingsSearchQuery.value.takeIf { it.isNotBlank() },
                                 societyFilter = _inListingsSocietyFilter.value
                             )
+                            _inListings.value = currentIn
+                            _projectSummaries.value = store.getProjectSummaries()
                         }
                     }
                 }
             } catch (e: Exception) {
-                // Ignore or log
+                android.util.Log.e("ChatViewModel", "Failed to load IN listings", e)
             } finally {
                 _isLoadingInListings.value = false
             }
