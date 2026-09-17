@@ -25,7 +25,7 @@ data class InventoryTotals(val rows: Int, val matched: Int)
 class StreamingInventoryStore(private val work: InventorySql, private val cache: InventorySql) : Closeable {
     companion object {
         // Bump when property extraction, project rules, or CSV field conversion change.
-        const val CACHE_VERSION = "android-inventory-v2"
+        const val CACHE_VERSION = "android-inventory-v4"
         private val NON_WORD = Regex("[^\\p{L}\\p{N}]+")
         private val NON_DIGIT = Regex("\\D")
         private val json = Json {
@@ -92,13 +92,36 @@ class StreamingInventoryStore(private val work: InventorySql, private val cache:
         return rows
     }
 
+    private fun isLid(str: String?): Boolean {
+        if (str.isNullOrBlank()) return false
+        if (str.contains("@lid", ignoreCase = true)) return true
+        val digits = str.filter { it.isDigit() }
+        return digits.length >= 13 && digits.length == str.trim().length
+    }
+
+    private fun cleanSender(sender: String): String {
+        return if (sender.contains("@")) sender.substringBefore("@").trim() else sender.trim()
+    }
+
     fun add(message: RawMessage) {
         processed++
         for (template in templates(message.text)) {
             extracted++
-            val fallback = NON_DIGIT.replace(message.senderName, "").takeLast(10).takeIf { it.length == 10 } ?: ""
-            val row = template.copy(dealerName = message.senderName,
-                phoneNo = template.phoneNo.ifEmpty { fallback })
+            val inMsgDealer = PropertyListingExtractor.extractDealerName(template.fullMessage)
+            val isSenderLid = isLid(message.senderName)
+            val cleanSender = cleanSender(message.senderName)
+            val senderPhone = NON_DIGIT.replace(cleanSender, "").takeLast(10).takeIf { it.length == 10 } ?: ""
+
+            val resolvedDealer = when {
+                inMsgDealer.isNotEmpty() -> inMsgDealer
+                template.dealerName.isNotBlank() && !isLid(template.dealerName) && !template.dealerName.equals("Dealer", ignoreCase = true) -> template.dealerName
+                !isSenderLid && cleanSender.isNotBlank() -> cleanSender
+                template.phoneNo.isNotEmpty() -> template.phoneNo
+                senderPhone.isNotEmpty() -> senderPhone
+                else -> "Dealer"
+            }
+            val resolvedPhone = template.phoneNo.ifEmpty { senderPhone }
+            val row = template.copy(dealerName = resolvedDealer, phoneNo = resolvedPhone)
             val normalized = normalize(row.fullMessage)
             if (normalized.isEmpty()) continue
             val key = "${normalize(row.dealerName)}|$normalized"

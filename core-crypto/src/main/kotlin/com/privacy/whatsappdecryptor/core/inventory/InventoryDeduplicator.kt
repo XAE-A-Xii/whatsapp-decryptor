@@ -85,10 +85,18 @@ object InventoryDeduplicator {
     }
 
     private fun accommodationForInventory(row: ExtractedListing): String {
+        val text = row.fullMessage
         if (row.bhk.isNotEmpty()) {
-            val servant = Regex("\\b\\d\\s*(?:BHK|BED(?:ROOM)?)\\s*\\+\\s*(?:S|SQ|SR|SERVANT)\\b", RegexOption.IGNORE_CASE)
-                .containsMatchIn(row.fullMessage)
-            return "${row.bhk}BHK${if (servant) " + SR" else ""}"
+            val servant = Regex("\\b\\d\\s*(?:BHK|BED(?:ROOM)?|BR)?\\s*\\+\\s*(?:S|SQ|SR|SERVANT)\\b", RegexOption.IGNORE_CASE).containsMatchIn(text)
+                || Regex("\\b(?:servant|maid|\\bSR\\b)", RegexOption.IGNORE_CASE).containsMatchIn(text)
+            val study = Regex("\\bSTUDY\\b", RegexOption.IGNORE_CASE).containsMatchIn(text)
+            val suffix = when {
+                servant && study -> " + SR + STUDY"
+                servant -> " + SR"
+                study -> " + STUDY"
+                else -> ""
+            }
+            return "${row.bhk}BHK$suffix"
         }
         val type = row.propertyType
         return when {
@@ -97,14 +105,15 @@ object InventoryDeduplicator {
             Regex("plot|land", RegexOption.IGNORE_CASE).containsMatchIn(type) -> "PLOT"
             Regex("shop|retail", RegexOption.IGNORE_CASE).containsMatchIn(type) -> "SHOP"
             Regex("villa|bungalow", RegexOption.IGNORE_CASE).containsMatchIn(type) -> "VILLA"
+            Regex("floor|builder", RegexOption.IGNORE_CASE).containsMatchIn(type) -> "BUILDER FLOOR"
             else -> ""
         }
     }
 
     private fun floorForInventory(row: ExtractedListing): String {
         val text = row.fullMessage
-        val valuePattern = "(lower ground|upper ground|ground|basement|middle|lower|higher|\\d{1,2}(?:st|nd|rd|th)?)"
-        val match1 = Regex("\\b(?:floor|flr)[ \\t]*[-–:.#]?[ \\t]*$valuePattern", RegexOption.IGNORE_CASE).find(text)
+        val valuePattern = "(lower ground|upper ground|ground|basement|middle|lower|higher|ugf|lgf|\\d{1,2}(?:st|nd|rd|th)?)"
+        val match1 = Regex("\\b(?:floor|flr)[ \\t]*[-–:.#]?[ \\t]*$valuePattern\\b", RegexOption.IGNORE_CASE).find(text)
         val match2 = Regex("\\b$valuePattern[ \\t]*(?:floor|flr)\\b", RegexOption.IGNORE_CASE).find(text)
         val match = match1 ?: match2
         if (match != null) {
@@ -112,6 +121,8 @@ object InventoryDeduplicator {
             val number = Regex("^\\d+").find(value)?.value
             return number ?: value.uppercase()
         }
+        if (Regex("\\bUGF\\b", RegexOption.IGNORE_CASE).containsMatchIn(text)) return "UGF"
+        if (Regex("\\bLGF\\b", RegexOption.IGNORE_CASE).containsMatchIn(text)) return "LGF"
         if (Regex("sco", RegexOption.IGNORE_CASE).containsMatchIn(row.propertyType)) return "SCO"
         if (Regex("plot|land", RegexOption.IGNORE_CASE).containsMatchIn(row.propertyType)) return "PLOT"
         return ""
@@ -122,34 +133,73 @@ object InventoryDeduplicator {
         val unit = Regex("\\b(?:flat|unit)\\s*(?:no\\.?|number)?\\s*[-–:.#]?\\s*([A-Z0-9][A-Z0-9/-]{0,14})", RegexOption.IGNORE_CASE).find(text)?.groupValues?.get(1)
         val tower = Regex("\\b(?:tower|twr)\\s*[-–:.#]?\\s*([A-Z0-9][A-Z0-9/-]{0,8})", RegexOption.IGNORE_CASE).find(text)?.groupValues?.get(1)
         if (tower != null && unit != null) return "T ${tower.uppercase()} ${unit.uppercase()}"
+        if (tower != null) return "T ${tower.uppercase()}"
         if (unit != null) return unit.uppercase()
         val block = Regex("\\bblock\\s*[-–:.#]?\\s*([A-Z0-9][A-Z0-9/-]{0,10})", RegexOption.IGNORE_CASE).find(text)?.groupValues?.get(1)
         return if (block != null) "BLOCK ${block.uppercase()}" else ""
     }
 
+    private fun isLid(str: String?): Boolean {
+        if (str.isNullOrBlank()) return false
+        if (str.contains("@lid", ignoreCase = true)) return true
+        val digits = str.filter { it.isDigit() }
+        return digits.length >= 13 && digits.length == str.trim().length
+    }
+
+    private fun cleanSender(sender: String): String {
+        return if (sender.contains("@")) sender.substringBefore("@").trim() else sender.trim()
+    }
+
+    private fun dealerForInventory(row: ExtractedListing): String {
+        val inMsg = PropertyListingExtractor.extractDealerName(row.fullMessage)
+        if (inMsg.isNotEmpty()) return inMsg
+
+        if (row.postedBy.isNotBlank() && !isLid(row.postedBy)) {
+            val cleaned = cleanSender(row.postedBy)
+            if (cleaned.isNotEmpty()) return cleaned
+        }
+
+        val phone = phoneForInventory(row)
+        if (phone.isNotEmpty()) return phone
+
+        val postedClean = cleanSender(row.postedBy)
+        return if (isLid(row.postedBy) || isLid(postedClean)) "Dealer" else postedClean.ifEmpty { "Dealer" }
+    }
+
     private fun phoneForInventory(row: ExtractedListing): String {
         val contact = row.contactNo.split(",").firstOrNull()?.replace(Regex("\\D"), "")?.takeLast(10) ?: ""
         if (contact.length == 10) return contact
-        val dealer = row.postedBy.replace(Regex("\\D"), "").takeLast(10)
-        return if (dealer.length == 10) dealer else ""
+        if (!isLid(row.postedBy)) {
+            val dealer = row.postedBy.replace(Regex("\\D"), "").takeLast(10)
+            if (dealer.length == 10) return dealer
+        }
+        return ""
     }
 
     private fun priceForInventory(row: ExtractedListing): String {
         val sale = row.salePriceCr.split("|").map { it.trim() }.filter { it.isNotEmpty() }
         if (sale.isNotEmpty()) return sale.joinToString(" | ") { "$it CR" }
         if (row.rentPerMonth.isNotEmpty()) return row.rentPerMonth
-        return row.ratePerSqFt
+        if (row.ratePerSqFt.isNotEmpty()) return row.ratePerSqFt
+        val rateMatch = Regex("@\\s*(\\d{4,6})(?:\\s*/-)?", RegexOption.IGNORE_CASE).find(row.fullMessage)
+        if (rateMatch != null) {
+            return "@ ${rateMatch.groupValues[1]}"
+        }
+        return ""
     }
 
     /** Convert a single parsed listing without date filtering or accumulating rows. */
     fun toImportantDealerRow(listing: ExtractedListing): ImportantDealerRow {
         val canonical = ProjectRegistry.canonicalSelectedProject(listing.projectOrSociety)
+            .ifEmpty { ProjectRegistry.findCanonicalProjectInText(listing.fullMessage) }
+        val resolvedSociety = canonical.ifEmpty { listing.projectOrSociety }
+        val dealer = dealerForInventory(listing)
         return ImportantDealerRow(
-            society = canonical.ifEmpty { listing.projectOrSociety },
+            society = resolvedSociety,
             projectListStatus = if (canonical.isEmpty()) "OUT" else "IN",
             sec = sectorForInventory(listing), area = areaForInventory(listing),
             acco = accommodationForInventory(listing), floor = floorForInventory(listing),
-            flatNo = flatNumberForInventory(listing), dealerName = listing.postedBy,
+            flatNo = flatNumberForInventory(listing), dealerName = dealer,
             phoneNo = phoneForInventory(listing), price = priceForInventory(listing),
             fullMessage = listing.fullMessage, isDuplicate = false
         )
@@ -162,9 +212,11 @@ object InventoryDeduplicator {
         // Project Canonicalization
         val processedListings = consolidated.map { row ->
             val canonical = ProjectRegistry.canonicalSelectedProject(row.projectOrSociety)
+                .ifEmpty { ProjectRegistry.findCanonicalProjectInText(row.fullMessage) }
             val status = if (canonical.isNotEmpty()) "IN" else "OUT"
             val society = if (canonical.isNotEmpty()) canonical else row.projectOrSociety
-            row.copy(projectOrSociety = society) to status
+            val dealer = dealerForInventory(row)
+            row.copy(projectOrSociety = society, postedBy = dealer) to status
         }
 
         // Duplicate Marking:

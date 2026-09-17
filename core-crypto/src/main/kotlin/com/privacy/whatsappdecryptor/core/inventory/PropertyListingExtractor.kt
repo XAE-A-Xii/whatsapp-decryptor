@@ -59,7 +59,7 @@ object PropertyListingExtractor {
     )
 
     private const val SIZE_SRC = "(\\d{2,6}(?:[.,]\\d{1,3})?)\\s*(sq\\.?\\s*(?:yd|yds|yard|yards|gaj)|sq\\s*yrd|sqyd|sqyrd|yds?\\b|gaj\\b|sq\\.?\\s*(?:ft|feet)|sqft|sqf\\b|sqt\\b|\\bsf\\b|s\\.?f\\.?t)"
-    private const val BHK_SRC = "(\\d(?:\\s*(?:&|,|/|\\+|and|to)\\s*\\d)*)\\s*(?:\\+\\s*\\d\\s*)?\\s*(?:bhk|b\\.h\\.k|bed\\s*rooms?|bedrooms?|\\bbr\\b)"
+    private const val BHK_SRC = "(\\d(?:\\.\\d)?(?:\\s*(?:&|,|/|\\+|and|to)\\s*\\d(?:\\.\\d)?)*)\\s*(?:\\+\\s*\\d\\s*)?\\s*(?:bhk|b\\.h\\.k|bed\\s*rooms?|bedrooms?|\\bbed\\b|br\\b)"
     private const val CR_SRC = "(\\d{1,4}(?:[.,]\\d{1,3})?)\\s*(?:cr\\b|crore?s?\\b)"
     private const val LAC_SRC = "(\\d{1,4}(?:[.,]\\d{1,3})?)\\s*(?:lacs?\\b|lakhs?\\b|l\\b)"
     private const val SECTOR_SRC = "\\b(?:sector|sec)\\s*[-–:. ]?\\s*(\\d{1,3}\\s*[A-Da-d]?)\\b"
@@ -73,6 +73,7 @@ object PropertyListingExtractor {
     private val PHONE_RE = Regex(PHONE_SRC)
 
     private val PSF_RE = Regex("(\\d{3,6})\\s*(?:/-)?\\s*(?:per|/|p)\\s*sq\\.?\\s*(?:ft|feet|yd|yard)", RegexOption.IGNORE_CASE)
+    private val AT_RATE_RE = Regex("@\\s*(\\d{4,6})\\s*(?:/-|/)?(?![\\d.])", RegexOption.IGNORE_CASE)
     private const val RENT_K_SRC = "(\\d{1,3}(?:\\.\\d{1,2})?)\\s*k\\b"
     private val RENT_K_RE = Regex(RENT_K_SRC, RegexOption.IGNORE_CASE)
     private const val BIGNUM_SRC = "(?<![\\d.])(\\d[\\d,]{3,8})(?:/-)?(?![\\d.])"
@@ -109,6 +110,116 @@ object PropertyListingExtractor {
 
     private val SALE_KW_G = Regex("\\bsale\\s*price|\\bfor\\s*sale\\b|\\basking\\b|\\bdemand\\b|\\bbooks?\\b|\\bcost\\b|\\bprice\\b", RegexOption.IGNORE_CASE)
     private val RENT_ANY_G = Regex("\\brents?\\b|\\brental\\b|\\brented\\b|\\blease\\b|\\btenant\\b|\\bp\\.?\\s*m\\b|/month|per\\s*month|\\bmonthly\\b|\\+\\s*m\\b|incl?u?d?i?n?g?\\.?\\s*maint|excl?u?d?i?n?g?\\.?\\s*maint", RegexOption.IGNORE_CASE)
+
+    private val DEALER_NAME_BLACKLIST = Regex(
+        "\\b(?:bhk|b\\.h\\.k|bedroom|bedrooms|sq\\.?\\s*ft|sqft|sqyd|sq\\.?\\s*yd|crore?s?|\\bcr\\b|lacs?|lakhs?|sector|sec\\b|" +
+                "rent|rents|rental|sale|resale|available|demand|asking|price|cheque|facing|ready|move|furnished|" +
+                "apartment|apartments|flat|flats|floor|floors|tower|villa|plot|plots|office|commercial|retail|sco|" +
+                "mandate|deal|deals|exclusive|option|options|urgent|looking|required|finance|payment|budget|" +
+                "video|photo|details|advance|deposit|agreement|maintenance|maintainance|" +
+                "call|calling|contact|phone|mobile|mob|tele|tel|whatsapp|chat|" +
+                "jai|shree|shyam|mata|radhe|krishna|ram|om|ganesh|allah|god|bless|good\\s*morning|welcome|mandate)\\b",
+        RegexOption.IGNORE_CASE
+    )
+
+    private val AGENCY_PATTERN = Regex(
+        "(?:^|[\\n\\r])[🏠🏢🏬]?\\s*([A-Za-z][A-Za-z0-9 \\t&.',-]{1,35}?\\s+(?:Properties|Realtors|Real\\s*Estate|Realstate|Associates?|Consultants?|Realty|Homes?|Enterprises?|Interiors?|Infratech|Buildtech|Promoters))\\s*[🏠🏢🏬]?(?=$|[\\n\\r])",
+        RegexOption.IGNORE_CASE
+    )
+
+    private val SIGNATURE_PREFIX_PATTERNS = listOf(
+        Regex("\\b(?:regards|warm\\s*regards|thanks\\s*&?\\s*regards)\\s*[:—–-]?\\s*([A-Za-z][A-Za-z\\s&.']{1,25}?)(?=\\s*(?:[+0-9,\\n\\r|•/]|📞|☎|📱|📲|🤙|$))", RegexOption.IGNORE_CASE),
+        Regex("\\b(?:contact(?:\\s*person)?|pls\\s*call|please\\s*call|call|reach(?:\\s*us)?|connect\\s*with)\\s*[:—–-]?\\s*([A-Za-z][A-Za-z\\s&.']{1,25}?)(?=\\s*(?:[+0-9,\\n\\r|•/]|📞|☎|📱|📲|🤙|$))", RegexOption.IGNORE_CASE)
+    )
+
+    fun isValidDealerName(candidate: String?): Boolean {
+        if (candidate.isNullOrBlank()) return false
+        val clean = candidate.trim().replace(Regex("[*_\"#]"), "").trim()
+        if (clean.length < 3 || clean.length > 40) return false
+        if (clean.any { it.isDigit() }) return false
+        if (DEALER_NAME_BLACKLIST.containsMatchIn(clean)) return false
+        if (ProjectRegistry.canonicalSelectedProject(clean).isNotEmpty()) return false
+        if (PROJECT_HINTS.containsMatchIn(clean) && !Regex("properties|realt|estate|associate", RegexOption.IGNORE_CASE).containsMatchIn(clean)) return false
+        val letters = clean.count { it.isLetter() }
+        if (letters < 3) return false
+        return true
+    }
+
+    fun formatDealerName(name: String): String {
+        val words = name.trim().replace(Regex("[*_\"#]"), "").split(Regex("\\s+")).filter { it.isNotBlank() }
+        return words.joinToString(" ") { word ->
+            if (word.equals("and", ignoreCase = true) || word == "&") word.lowercase()
+            else word.lowercase().replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+        }
+    }
+
+    fun extractDealerName(text: String): String {
+        if (text.isBlank()) return ""
+        val clean = stripFmt(Normalizer.normalize(text.replace("\r", "").replace("‎", ""), Normalizer.Form.NFKC))
+
+        // 1. Signature prefixes: "call Ghanshyam", "Contact: Rahul Sharma", "Warm regards Vikram"
+        for (p in SIGNATURE_PREFIX_PATTERNS) {
+            val m = p.find(clean)
+            if (m != null) {
+                val candidate = m.groupValues[1].trim()
+                if (isValidDealerName(candidate)) {
+                    return formatDealerName(candidate)
+                }
+            }
+        }
+
+        // 2. Line-by-line relative to phone numbers
+        val lines = clean.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        for (i in lines.indices) {
+            val line = lines[i]
+            val phoneMatch = PHONE_RE.find(line)
+            if (phoneMatch != null) {
+                val beforePhone = line.substring(0, phoneMatch.range.first)
+                    .replace(Regex("[📞☎️☎📱📲🤙:–—\\-]"), " ").trim()
+                if (isValidDealerName(beforePhone)) {
+                    return formatDealerName(beforePhone)
+                }
+                val beforeWords = beforePhone.split(Regex("\\s+")).filter { it.isNotBlank() }
+                for (takeCount in minOf(3, beforeWords.size) downTo 1) {
+                    val candidate = beforeWords.takeLast(takeCount).joinToString(" ")
+                    if (isValidDealerName(candidate)) {
+                        return formatDealerName(candidate)
+                    }
+                }
+
+                val afterPhone = line.substring(phoneMatch.range.last + 1)
+                    .replace(Regex("[📞☎️☎📱📲🤙:–—\\-]"), " ").trim()
+                if (isValidDealerName(afterPhone)) {
+                    return formatDealerName(afterPhone)
+                }
+                val afterWords = afterPhone.split(Regex("\\s+")).filter { it.isNotBlank() }
+                for (takeCount in minOf(3, afterWords.size) downTo 1) {
+                    val candidate = afterWords.take(takeCount).joinToString(" ")
+                    if (isValidDealerName(candidate)) {
+                        return formatDealerName(candidate)
+                    }
+                }
+
+                for (prevIdx in (i - 1) downTo maxOf(0, i - 2)) {
+                    val prevLine = lines[prevIdx].replace(Regex("[📞☎️☎📱📲🤙:–—\\-]"), " ").trim()
+                    if (isValidDealerName(prevLine) && !PHONE_RE.containsMatchIn(prevLine)) {
+                        return formatDealerName(prevLine)
+                    }
+                }
+            }
+        }
+
+        // 3. Agency name anywhere in text
+        val agencyMatch = AGENCY_PATTERN.find(clean)
+        if (agencyMatch != null) {
+            val candidate = agencyMatch.groupValues[1].trim()
+            if (isValidDealerName(candidate)) {
+                return formatDealerName(candidate)
+            }
+        }
+
+        return ""
+    }
 
     private val dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yy").withZone(ZoneId.systemDefault())
     private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault())
@@ -163,6 +274,27 @@ object PropertyListingExtractor {
     }
 
     fun project(t: String): String {
+        // Tier 1: Canonical project matching anywhere in message
+        val canonical = ProjectRegistry.findCanonicalProjectInText(t)
+        if (canonical.isNotEmpty()) {
+            return canonical
+        }
+
+        // Tier 2: Explicit prefix patterns
+        val prefixMatch = Regex(
+            "(?:(?:available\\s+(?:for\\s+\\w+\\s+)?|for\\s+(?:sale|rent)\\s+)?(?:in|at)\\s+|project\\s*[:\\-–]\\s*|society\\s*[:\\-–]\\s*|location\\s*[:\\-–]\\s*)" +
+            "([A-Za-z0-9][A-Za-z0-9\\s-]{2,40}?)" +
+            "(?=\\s*[,|–-]\\s*(?:sector|sec\\b|\\d+\\s*(?:bhk|br|bed|sqft|cr|lac)|size|floor|tower|price|call)|\\s+(?:sector|sec\\b|\\d+\\s*(?:bhk|br|bed|sqft|cr|lac)|size|floor|tower|price|call)\\b|\\n|$)",
+            RegexOption.IGNORE_CASE
+        ).find(t)
+        if (prefixMatch != null) {
+            val candidate = pyStrip(stripFmt(prefixMatch.groupValues[1]), " :•*-–—>·|.").trim()
+            if (candidate.length in 4..50 && !GENERIC.containsMatchIn(candidate) && !HEADLINE.containsMatchIn(candidate)) {
+                return candidate
+            }
+        }
+
+        // Tier 3: Line / segment scoring without arbitrary length limits
         var bestScore = -Double.MAX_VALUE
         var bestNegI = Int.MIN_VALUE
         var bestLine = ""
@@ -170,7 +302,16 @@ object PropertyListingExtractor {
         val lines = t.split("\n")
         for (i in lines.indices) {
             var l = pyStrip(stripFmt(lines[i]), " :•*-–—>·|.").replace(Regex("\\s{2,}"), " ")
-            if (l.length <= 3 || l.length >= 80) continue
+            if (l.length <= 3) continue
+            // If the line is long, trim listing details from candidate title
+            if (l.length > 80) {
+                val cutIdx = Regex("(?=\\s*[,|–-]\\s*(?:sector|sec\\b|size|\\d+\\s*(?:bhk|br|sqft)|book\\s*value|price|call)|\\s+(?:size|book\\s*value|call)\\b)", RegexOption.IGNORE_CASE).find(l)?.range?.first
+                if (cutIdx != null && cutIdx > 3) {
+                    l = l.substring(0, cutIdx).trim()
+                } else if (l.length > 120) {
+                    continue
+                }
+            }
             if (PHONE_RE.containsMatchIn(l) || HEADLINE.containsMatchIn(l) || GENERIC.containsMatchIn(l) || GENERIC2.containsMatchIn(l)) continue
             val letters = l.replace(Regex("[^A-Za-z]"), "")
             if (letters.length < 4) continue
@@ -229,14 +370,18 @@ object PropertyListingExtractor {
     }
 
     fun bhk(t: String): String {
-        val vals = sortedSetOf<Int>()
+        val vals = mutableSetOf<String>()
         for (m in BHK_RE.findAll(t)) {
-            val digits = Regex("\\d").findAll(m.groupValues[1]).map { it.value.toInt() }
-            for (d in digits) {
-                if (d in 1..9) vals.add(d)
+            val numPart = m.groupValues[1]
+            val numbers = Regex("\\d(?:\\.\\d)?").findAll(numPart).map { it.value }
+            for (n in numbers) {
+                val d = n.toDoubleOrNull() ?: continue
+                if (d in 0.5..9.5) {
+                    vals.add(if (d % 1.0 == 0.0) d.toInt().toString() else d.toString())
+                }
             }
         }
-        return vals.joinToString("/")
+        return vals.sortedBy { it.toDoubleOrNull() ?: 0.0 }.joinToString("/")
     }
 
     data class MoneyResult(val sale: List<Double>, val rent: List<Double>, val rates: List<String>)
@@ -312,6 +457,11 @@ object PropertyListingExtractor {
         for (m in PSF_RE.findAll(t)) {
             val n = m.groupValues[1].toIntOrNull() ?: continue
             if (n in 1000..500000) return n.toString()
+        }
+        val atM = AT_RATE_RE.find(t)
+        if (atM != null) {
+            val n = atM.groupValues[1].toIntOrNull()
+            if (n != null && n in 1000..500000) return "@ $n"
         }
         return ""
     }
@@ -400,11 +550,14 @@ object PropertyListingExtractor {
                 val phonesPart = PHONE_RE.findAll(c).map { it.groupValues[1].replace(Regex("\\D"), "").takeLast(10) }.toList()
                 val phones = (phonesPart + phonesMsg).distinct()
 
+                val inMsgDealer = extractDealerName(c).ifEmpty { extractDealerName(fullClean) }
+                val resolvedPostedBy = inMsgDealer.ifEmpty { msg.senderName }
+
                 rows.add(
                     ExtractedListing(
                         date = dateStr,
                         time = timeStr,
-                        postedBy = msg.senderName,
+                        postedBy = resolvedPostedBy,
                         dealType = dt,
                         propertyType = propertyType(c).ifEmpty { propertyType(fullClean) },
                         projectOrSociety = pj,

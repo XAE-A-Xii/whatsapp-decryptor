@@ -68,6 +68,76 @@ object ProjectRegistry {
         return name
     }
 
+    data class ProjectPattern(val regex: Regex, val canonical: String)
+
+    private val FULL_TEXT_CANONICAL_PATTERNS: List<ProjectPattern> = listOf(
+        ProjectPattern(Regex("\\bM3M\\s+CAPITAL\\s+WALK\\b", RegexOption.IGNORE_CASE), "M3M CAPITAL WALK"),
+        ProjectPattern(Regex("\\bSMART\\s*WORLD\\s+(?:ONE\\s+)?DXP\\b", RegexOption.IGNORE_CASE), "SMART WORLD DXP"),
+        ProjectPattern(Regex("\\bONE\\s+DXP\\b", RegexOption.IGNORE_CASE), "SMART WORLD DXP"),
+        ProjectPattern(Regex("\\bM3M\\s+MANSION\\b", RegexOption.IGNORE_CASE), "M3M MANSION"),
+        ProjectPattern(Regex("\\bM3M\\s+CAPITAL\\b", RegexOption.IGNORE_CASE), "M3M CAPITAL"),
+        ProjectPattern(Regex("\\bM3M\\s+CROWN\\b", RegexOption.IGNORE_CASE), "M3M CROWN"),
+        ProjectPattern(Regex("\\bPURI\\s+DIPLOMAT?IC(?:\\s+RESIDENCES?)?\\b", RegexOption.IGNORE_CASE), "PURI DIPLOMACTIC"),
+        ProjectPattern(Regex("\\bDIPLOMAT?IC\\s+GREENS?\\b", RegexOption.IGNORE_CASE), "DIPLOMACTIC GREEN NEW"),
+        ProjectPattern(Regex("\\bTASHEE\\s+CAPITAL\\s+GATE?WAY\\b", RegexOption.IGNORE_CASE), "TASHEE CAPITAL GATWAY"),
+        ProjectPattern(Regex("\\bENIGMA\\b|\\bENGIMA\\b", RegexOption.IGNORE_CASE), "ENGIMA"),
+        ProjectPattern(Regex("\\bELAN\\s+(?:THE\\s+)?PRESIDENTIAL\\b", RegexOption.IGNORE_CASE), "ELAN THE PRESIDENTIAL"),
+        ProjectPattern(Regex("\\bSOBHA\\s+CITY\\b", RegexOption.IGNORE_CASE), "SOBHA CITY"),
+        ProjectPattern(Regex("\\bGODREJ\\s+MERIDI?EN\\b", RegexOption.IGNORE_CASE), "GODREJ MERIDIAN"),
+        ProjectPattern(Regex("\\bHERO\\s+HOMES?\\b", RegexOption.IGNORE_CASE), "HERO HOMES"),
+        ProjectPattern(Regex("\\bBPTP\\s+AM[S]?TORIA\\b", RegexOption.IGNORE_CASE), "BPTP AMTORIA"),
+        ProjectPattern(Regex("\\bM3M\\s+WOODSHIRE\\b", RegexOption.IGNORE_CASE), "M3M WOODSHIRE"),
+        ProjectPattern(Regex("\\bATS\\s+K[O|U]COON\\b", RegexOption.IGNORE_CASE), "ATS KOCOON"),
+        ProjectPattern(Regex("\\bWINDCH[A|I]NTS?\\b", RegexOption.IGNORE_CASE), "WINDCHINTS"),
+        ProjectPattern(Regex("\\bIMPERIAL\\s+GARDENS?\\b", RegexOption.IGNORE_CASE), "IMPERIAL GARDEN"),
+        ProjectPattern(Regex("\\bTATA\\s+GURGAON\\s+GATEWAY\\b", RegexOption.IGNORE_CASE), "TATA GURGAON GATEWAY"),
+        ProjectPattern(Regex("\\bINDIABULLS\\s+OFFICE\\b", RegexOption.IGNORE_CASE), "INDIABULLS OFFICE SPACE"),
+        ProjectPattern(Regex("\\bANSAL\\s+HIGHLAND\\s+PARK\\b", RegexOption.IGNORE_CASE), "ANSAL HIGHLAND PARK"),
+        ProjectPattern(Regex("\\b(SHAPOORJI|SHAHPURJEE|SHAPURJI)\\b", RegexOption.IGNORE_CASE), "SHAHPURJEE"),
+        ProjectPattern(Regex("\\bSATYA\\s+HIVE\\b", RegexOption.IGNORE_CASE), "SATYA HIVE SEC102"),
+        ProjectPattern(Regex("\\bHEART\\s*SONG\\b", RegexOption.IGNORE_CASE), "HEART SONG"),
+        ProjectPattern(Regex("\\b(KRISUMI|KRUSIMI)\\b", RegexOption.IGNORE_CASE), "KRUSIMI"),
+        ProjectPattern(Regex("\\bHERITAGE\\s+MAX\\b", RegexOption.IGNORE_CASE), "HERITAGE MAX"),
+        ProjectPattern(Regex("\\bPARAS\\b", RegexOption.IGNORE_CASE), "PARAS"),
+        ProjectPattern(Regex("\\bG\\s*99\\b", RegexOption.IGNORE_CASE), "G 99 PLOT"),
+        ProjectPattern(Regex("\\bEXPERION\\s+WESTERLIES\\b|\\bEXPERION\\s+WESTILIZE\\b", RegexOption.IGNORE_CASE), "EXPERION WESTILIZE"),
+        ProjectPattern(Regex("\\bPURI\\s+EMERALD\\s+BAY\\b", RegexOption.IGNORE_CASE), "PURI EMERALD BAY"),
+        ProjectPattern(Regex("\\bTATA\\s+LA\\s+VIDA\\b", RegexOption.IGNORE_CASE), "TATA LA VIDA"),
+        ProjectPattern(Regex("\\bKASHISH\\s+MANOR\\s+ONE\\b|\\bKASHISH\\s+MANON\\s+ONE\\b", RegexOption.IGNORE_CASE), "KASHISH MANON ONE"),
+        ProjectPattern(Regex("\\bRA[H|J]EJA\\s+VANYA\\b", RegexOption.IGNORE_CASE), "RAJEJA VANYA PLOT"),
+        ProjectPattern(Regex("\\bPLAZA\\s*(?:SEC(?:TOR)?)?\\s*106\\b", RegexOption.IGNORE_CASE), "PLAZA SEC 106"),
+        ProjectPattern(Regex("\\bASSOTECH\\s+BLITH\\b", RegexOption.IGNORE_CASE), "ASSOTECH BLITH"),
+        ProjectPattern(Regex("\\bGURGAON\\s+GREENS?\\b", RegexOption.IGNORE_CASE), "GURGAON GREENS"),
+        ProjectPattern(Regex("\\bGODREJ\\s+ZENITH\\b", RegexOption.IGNORE_CASE), "GODREJ ZENITH"),
+        ProjectPattern(Regex("\\bMAX\\s*360\\b", RegexOption.IGNORE_CASE), "MAX 360"),
+        ProjectPattern(Regex("\\bSOBHA\\s+VILLA\\b", RegexOption.IGNORE_CASE), "SOBHA VILLA"),
+        ProjectPattern(Regex("\\bM3M\\s+SOLITUDE\\b|\\bM3M\\s+SOULITUDE\\b", RegexOption.IGNORE_CASE), "M3M SOLITUDE"),
+        ProjectPattern(Regex("\\bCOSMOS\\s+EXPRESS\\b", RegexOption.IGNORE_CASE), "COSMOS EXPRESS"),
+        ProjectPattern(Regex("\\bGODREJ\\s+ICON\\b", RegexOption.IGNORE_CASE), "GODREJ ICON"),
+        ProjectPattern(Regex("\\bEMAAR\\s+EBD\\b|\\bEBD\\s*(?:SCO\\s*)?114\\b", RegexOption.IGNORE_CASE), "EMAAR EBD SCO 114"),
+        ProjectPattern(Regex("\\bATS\\s+TRI?UMPH\\b", RegexOption.IGNORE_CASE), "ATS TRIMPH"),
+        ProjectPattern(Regex("\\bATS\\s+TOURMALINE\\b|\\bATS\\s+TOURMOLINE\\b", RegexOption.IGNORE_CASE), "ATS TOURMOLINE"),
+        ProjectPattern(Regex("\\bHCBS\\b", RegexOption.IGNORE_CASE), "HCBS"),
+        ProjectPattern(Regex("\\bSATYA\\s+M[E|A]RINO\\b", RegexOption.IGNORE_CASE), "SATYA MERINO"),
+        ProjectPattern(Regex("\\bVIENNA\\s+GREENS?\\b", RegexOption.IGNORE_CASE), "VIENNA GREENS"),
+        ProjectPattern(Regex("\\bPAREENA\\s+COBAN\\b", RegexOption.IGNORE_CASE), "PAREENA COBAN"),
+        ProjectPattern(Regex("\\bINDIABULLS\\s+CLUB\\s*(?:&|AND)?\\s*ESTATE\\b", RegexOption.IGNORE_CASE), "INDIABULLS CLUB & ESTATE"),
+        ProjectPattern(Regex("\\bINDIA\\s*BULLS?\\s+H[E|I]IGHTS?\\b", RegexOption.IGNORE_CASE), "INDIA BULLS HIGHTS"),
+        ProjectPattern(Regex("\\bSIGNATURE\\s+(?:GLOBAL\\s+)?(?:DE\\s*LUXE\\s+)?DXP\\b", RegexOption.IGNORE_CASE), "SIGNATURE DXP"),
+        ProjectPattern(Regex("\\bKIMBERLY\\s+SUITES?\\b", RegexOption.IGNORE_CASE), "KIMBERLY SUITES"),
+        ProjectPattern(Regex("\\bWESTIN\\b", RegexOption.IGNORE_CASE), "WESTIN")
+    )
+
+    fun findCanonicalProjectInText(text: String?): String {
+        if (text.isNullOrBlank()) return ""
+        for (item in FULL_TEXT_CANONICAL_PATTERNS) {
+            if (item.regex.containsMatchIn(text)) {
+                return item.canonical
+            }
+        }
+        return ""
+    }
+
     fun canonicalSelectedProject(value: String?): String {
         val p = normalizeProjectName(value)
         if (p.isEmpty()) return ""

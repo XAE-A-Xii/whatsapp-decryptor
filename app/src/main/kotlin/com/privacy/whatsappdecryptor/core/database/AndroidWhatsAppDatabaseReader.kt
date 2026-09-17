@@ -13,7 +13,8 @@ import java.io.File
  * Uses Android's built-in [SQLiteDatabase] (C++ native engine) in strictly read-only mode.
  */
 class AndroidWhatsAppDatabaseReader private constructor(
-    private val db: SQLiteDatabase
+    private val db: SQLiteDatabase,
+    private val hasJidMap: Boolean = false
 ) : WhatsAppDatabaseSource {
 
     override fun listChats(
@@ -99,10 +100,11 @@ class AndroidWhatsAppDatabaseReader private constructor(
                 m.from_me, 
                 m.message_type, 
                 m.text_data,
-                sender_j.raw_string AS sender_raw_jid,
+                ${if (hasJidMap) "COALESCE(phone_j.raw_string, sender_j.raw_string)" else "sender_j.raw_string"} AS sender_raw_jid,
                 chat_j.raw_string AS chat_raw_jid
             FROM message m
             LEFT JOIN jid sender_j ON m.sender_jid_row_id = sender_j._id
+            ${if (hasJidMap) "LEFT JOIN jid_map jm ON sender_j._id = jm.lid_row_id LEFT JOIN jid phone_j ON jm.jid_row_id = phone_j._id" else ""}
             LEFT JOIN chat c ON m.chat_row_id = c._id
             LEFT JOIN jid chat_j ON c.jid_row_id = chat_j._id
             WHERE m.chat_row_id = ?
@@ -139,10 +141,11 @@ class AndroidWhatsAppDatabaseReader private constructor(
                 m.from_me, 
                 m.message_type, 
                 m.text_data,
-                sender_j.raw_string AS sender_raw_jid,
+                ${if (hasJidMap) "COALESCE(phone_j.raw_string, sender_j.raw_string)" else "sender_j.raw_string"} AS sender_raw_jid,
                 chat_j.raw_string AS chat_raw_jid
             FROM message m
             LEFT JOIN jid sender_j ON m.sender_jid_row_id = sender_j._id
+            ${if (hasJidMap) "LEFT JOIN jid_map jm ON sender_j._id = jm.lid_row_id LEFT JOIN jid phone_j ON jm.jid_row_id = phone_j._id" else ""}
             LEFT JOIN chat c ON m.chat_row_id = c._id
             LEFT JOIN jid chat_j ON c.jid_row_id = chat_j._id
             WHERE m.chat_row_id = ?
@@ -181,10 +184,11 @@ class AndroidWhatsAppDatabaseReader private constructor(
                 m.from_me, 
                 m.message_type, 
                 m.text_data,
-                sender_j.raw_string AS sender_raw_jid,
+                ${if (hasJidMap) "COALESCE(phone_j.raw_string, sender_j.raw_string)" else "sender_j.raw_string"} AS sender_raw_jid,
                 chat_j.raw_string AS chat_raw_jid
             FROM message m
             LEFT JOIN jid sender_j ON m.sender_jid_row_id = sender_j._id
+            ${if (hasJidMap) "LEFT JOIN jid_map jm ON sender_j._id = jm.lid_row_id LEFT JOIN jid phone_j ON jm.jid_row_id = phone_j._id" else ""}
             LEFT JOIN chat c ON m.chat_row_id = c._id
             LEFT JOIN jid chat_j ON c.jid_row_id = chat_j._id
             WHERE m.text_data LIKE ?
@@ -229,12 +233,13 @@ class AndroidWhatsAppDatabaseReader private constructor(
         val sql = """
             SELECT 
                 m.timestamp, 
-                COALESCE(sender_j.raw_string, chat_j.raw_string, 'Unknown') AS sender, 
+                COALESCE(${if (hasJidMap) "phone_j.raw_string, " else ""}sender_j.raw_string, chat_j.raw_string, 'Unknown') AS sender, 
                 m.text_data
             FROM message m
             JOIN chat c ON m.chat_row_id = c._id
             JOIN jid chat_j ON c.jid_row_id = chat_j._id
             LEFT JOIN jid sender_j ON m.sender_jid_row_id = sender_j._id
+            ${if (hasJidMap) "LEFT JOIN jid_map jm ON sender_j._id = jm.lid_row_id LEFT JOIN jid phone_j ON jm.jid_row_id = phone_j._id" else ""}
             WHERE chat_j.server = 'g.us'
               AND c.sort_timestamp >= ?
               AND m.timestamp >= ?
@@ -280,11 +285,21 @@ class AndroidWhatsAppDatabaseReader private constructor(
         }
         for ((index, group) in groups.withIndex()) {
             onGroup(index, groups.size, group.second)
-            db.rawQuery("""SELECT m.timestamp, COALESCE(j.raw_string, 'Unknown'), m.text_data
+            val query = if (hasJidMap) {
+                """SELECT m.timestamp, COALESCE(phone_j.raw_string, j.raw_string, 'Unknown'), m.text_data
+                FROM message m
+                LEFT JOIN jid j ON m.sender_jid_row_id=j._id
+                LEFT JOIN jid_map jm ON j._id=jm.lid_row_id
+                LEFT JOIN jid phone_j ON jm.jid_row_id=phone_j._id
+                WHERE m.chat_row_id=? AND m.timestamp>=? AND m.message_type=0
+                AND m.text_data IS NOT NULL AND length(m.text_data)>0"""
+            } else {
+                """SELECT m.timestamp, COALESCE(j.raw_string, 'Unknown'), m.text_data
                 FROM message m LEFT JOIN jid j ON m.sender_jid_row_id=j._id
                 WHERE m.chat_row_id=? AND m.timestamp>=? AND m.message_type=0
-                AND m.text_data IS NOT NULL AND length(m.text_data)>0""",
-                arrayOf(group.first.toString(), sinceTimestampMs.toString())).use { cursor ->
+                AND m.text_data IS NOT NULL AND length(m.text_data)>0"""
+            }
+            db.rawQuery(query, arrayOf(group.first.toString(), sinceTimestampMs.toString())).use { cursor ->
                 while (cursor.moveToNext()) {
                     consume(com.privacy.whatsappdecryptor.core.inventory.RawMessage(
                         cursor.getLong(0), cursor.getString(1), cursor.getString(2)))
@@ -392,7 +407,8 @@ class AndroidWhatsAppDatabaseReader private constructor(
                     )
                 }
 
-                return AndroidWhatsAppDatabaseReader(db)
+                val hasJidMap = tables.contains("jid_map")
+                return AndroidWhatsAppDatabaseReader(db, hasJidMap)
             } catch (e: Exception) {
                 db.close()
                 throw e
