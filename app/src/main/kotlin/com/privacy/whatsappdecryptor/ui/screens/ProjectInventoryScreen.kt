@@ -147,10 +147,10 @@ fun ProjectInventoryScreen(
                     modifier = Modifier.padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Row(
+                    // Timeframe Window Segmented Pill Control
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text(
                             text = "Timeframe Window",
@@ -159,14 +159,38 @@ fun ProjectInventoryScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            listOf(1L, 3L).forEach { months ->
-                                FilterChip(
-                                    selected = selectedMonths == months,
-                                    onClick = { onMonthsChanged(months) },
-                                    label = { Text(if (months == 1L) "1 Month" else "3 Months") },
-                                    shape = RoundedCornerShape(8.dp)
-                                )
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                listOf(1L to "Past 1 Month", 3L to "Past 3 Months").forEach { (months, label) ->
+                                    val isSelected = selectedMonths == months
+                                    Surface(
+                                        onClick = { onMonthsChanged(months) },
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                        contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier.padding(vertical = 8.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = label,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -238,28 +262,36 @@ fun ProjectInventoryScreen(
                 }
             }
 
-            // Filter Chips (All / Target IN / Discovered OUT)
+            // Filter Chips with horizontal scrolling and sleek styling
             if (projectSummaries.isNotEmpty()) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
                         .padding(horizontal = 16.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     FilterChip(
                         selected = statusFilter == "ALL",
                         onClick = { onStatusFilterChanged("ALL") },
-                        label = { Text("All (${projectSummaries.size})") }
+                        label = { Text("All (${projectSummaries.size})") },
+                        shape = RoundedCornerShape(8.dp)
                     )
                     FilterChip(
                         selected = statusFilter == "IN",
                         onClick = { onStatusFilterChanged("IN") },
-                        label = { Text("Target Projects (${totalTargetProjects})") }
+                        label = { Text("Target IN (${totalTargetProjects})") },
+                        shape = RoundedCornerShape(8.dp),
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
                     )
                     FilterChip(
                         selected = statusFilter == "OUT",
                         onClick = { onStatusFilterChanged("OUT") },
-                        label = { Text("Discovered (${projectSummaries.size - totalTargetProjects})") }
+                        label = { Text("Other (${projectSummaries.size - totalTargetProjects})") },
+                        shape = RoundedCornerShape(8.dp)
                     )
                 }
             }
@@ -374,7 +406,7 @@ private fun ProjectCard(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -385,6 +417,7 @@ private fun ProjectCard(
                         overflow = TextOverflow.Ellipsis
                     )
                     if (formattedDate.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = "Latest: $formattedDate",
                             style = MaterialTheme.typography.labelSmall,
@@ -393,25 +426,38 @@ private fun ProjectCard(
                     }
                 }
 
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(10.dp))
 
                 Surface(
-                    shape = RoundedCornerShape(6.dp),
+                    shape = RoundedCornerShape(8.dp),
                     color = if (isTarget)
                         MaterialTheme.colorScheme.primaryContainer
                     else
-                        MaterialTheme.colorScheme.surfaceVariant
+                        MaterialTheme.colorScheme.surfaceContainerHighest
                 ) {
-                    Text(
-                        text = if (isTarget) "TARGET (IN)" else "DISCOVERED",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isTarget)
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        else
-                            MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        if (isTarget) {
+                            Icon(
+                                Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
+                        Text(
+                            text = if (isTarget) "Target (IN)" else "Discovered",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (isTarget)
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            else
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 
