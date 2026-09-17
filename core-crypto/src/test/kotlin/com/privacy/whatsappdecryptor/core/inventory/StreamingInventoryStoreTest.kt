@@ -159,4 +159,93 @@ class StreamingInventoryStoreTest {
             assertTrue(summaries.isNotEmpty())
         }
     }
+
+    @Test fun `CRUD operations on IN listings reflect in queries and exports`() {
+        val text1 = "M3M Capital\nAvailable for sale\n3 BHK\n1800 sqft\n2.5 cr"
+        val text2 = "Smart World DXP\nFresh unit\n4 BHK\n2800 sqft\n4.2 cr"
+        val text3 = "Random Unregistered Society\n2 BHK\n900 sqft\n1.1 cr"
+
+        runStore("crud_test") { store ->
+            store.add(RawMessage(100, "DealerA", text1))
+            store.add(RawMessage(200, "DealerB", text2))
+            store.add(RawMessage(300, "DealerC", text3))
+            store.prepare()
+
+            // 1. Initial IN listings: only text1 (M3M Capital) and text2 (Smart World DXP)
+            val initialIn = store.getInListings()
+            assertEquals(2, initialIn.size)
+
+            // 2. Society filtering
+            val m3mOnly = store.getInListings(societyFilter = "M3M CAPITAL")
+            assertEquals(1, m3mOnly.size)
+            assertEquals("DealerA", m3mOnly[0].row.dealerName)
+
+            // 3. Search query
+            val searchDealerB = store.getInListings(searchQuery = "DealerB")
+            assertEquals(1, searchDealerB.size)
+            assertEquals("SMART WORLD DXP", searchDealerB[0].row.society)
+
+            // 4. Update listing: change price and dealer name on M3M Capital
+            val m3mListing = m3mOnly[0]
+            val updatedM3mRow = m3mListing.row.copy(
+                price = "2.85 Cr",
+                dealerName = "DealerA Prime"
+            )
+            store.updateListing(m3mListing.id, updatedM3mRow)
+
+            val updatedIn = store.getInListings(societyFilter = "M3M CAPITAL")
+            assertEquals(1, updatedIn.size)
+            assertEquals("2.85 Cr", updatedIn[0].row.price)
+            assertEquals("DealerA Prime", updatedIn[0].row.dealerName)
+
+            // Verify project summary reflects updated dealer
+            val summariesAfterUpdate = store.getProjectSummaries()
+            val m3mSummary = summariesAfterUpdate.find { it.society == "M3M CAPITAL" }
+            assertNotNull(m3mSummary)
+            assertEquals(1, m3mSummary.totalListings)
+
+            // 5. Add a new manual listing
+            val newManualListing = ImportantDealerRow(
+                society = "M3M CAPITAL",
+                projectListStatus = "IN",
+                sec = "113",
+                area = "2200 sqft",
+                acco = "4 BHK",
+                floor = "15th",
+                flatNo = "1502",
+                dealerName = "Agent Direct",
+                phoneNo = "9876543210",
+                price = "3.2 Cr",
+                fullMessage = "Direct owner unit at M3M Capital",
+                isDuplicate = false
+            )
+            val newId = store.addListing(newManualListing)
+            assertNotNull(newId)
+
+            val m3mAfterAdd = store.getInListings(societyFilter = "M3M CAPITAL")
+            assertEquals(2, m3mAfterAdd.size)
+
+            val summariesAfterAdd = store.getProjectSummaries()
+            val m3mSummaryAfterAdd = summariesAfterAdd.find { it.society == "M3M CAPITAL" }
+            assertNotNull(m3mSummaryAfterAdd)
+            assertEquals(2, m3mSummaryAfterAdd.totalListings)
+
+            // Verify single project export contains the added listing
+            val exportedRows = mutableListOf<ImportantDealerRow>()
+            store.forEachRowForProject("M3M CAPITAL") { exportedRows.add(it) }
+            assertEquals(2, exportedRows.size)
+            assertTrue(exportedRows.any { it.dealerName == "Agent Direct" && it.price == "3.2 Cr" })
+
+            // 6. Delete listing: delete the original listing
+            store.deleteListing(m3mListing.id)
+            val m3mAfterDelete = store.getInListings(societyFilter = "M3M CAPITAL")
+            assertEquals(1, m3mAfterDelete.size)
+            assertEquals("Agent Direct", m3mAfterDelete[0].row.dealerName)
+
+            val summariesAfterDelete = store.getProjectSummaries()
+            val m3mSummaryAfterDelete = summariesAfterDelete.find { it.society == "M3M CAPITAL" }
+            assertNotNull(m3mSummaryAfterDelete)
+            assertEquals(1, m3mSummaryAfterDelete.totalListings)
+        }
+    }
 }

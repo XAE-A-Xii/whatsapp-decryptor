@@ -28,6 +28,13 @@ data class ProjectInventorySummary(
     val latestTimestamp: Long
 )
 
+@kotlinx.serialization.Serializable
+data class ManagedListing(
+    val id: String,
+    val timestamp: Long,
+    val row: ImportantDealerRow
+)
+
 data class InventoryTotals(val rows: Int, val matched: Int)
 
 /** Only a bounded set of parsed texts lives in memory. All ads and sorting live on disk. */
@@ -212,6 +219,105 @@ class StreamingInventoryStore(private val work: InventorySql, private val cache:
                 }
             }
         }
+    }
+
+    fun getInListings(searchQuery: String? = null, societyFilter: String? = null): List<ManagedListing> {
+        val conditions = mutableListOf("l.status = 'IN'")
+        val args = mutableListOf<Any?>()
+
+        if (!societyFilter.isNullOrBlank()) {
+            conditions.add("l.society = ?")
+            args.add(societyFilter.trim())
+        }
+
+        if (!searchQuery.isNullOrBlank()) {
+            val q = "%${searchQuery.trim()}%"
+            conditions.add("(l.society LIKE ? OR l.dealer LIKE ? OR l.fields LIKE ?)")
+            args.add(q)
+            args.add(q)
+            args.add(q)
+        }
+
+        val whereClause = conditions.joinToString(" AND ")
+        val sql = """
+            SELECT l.dedup_key, l.ts, l.fields, l.seq != (
+                SELECT newest.seq FROM listings newest
+                WHERE newest.society=l.society AND newest.dealer=l.dealer
+                ORDER BY newest.ts DESC, newest.seq DESC LIMIT 1
+            ) FROM listings l
+            WHERE $whereClause
+            ORDER BY l.ts DESC, l.seq DESC
+        """.trimIndent()
+
+        return work.query(sql, args) { cursor ->
+            val list = mutableListOf<ManagedListing>()
+            while (cursor.next()) {
+                val key = cursor.text(0)
+                val ts = cursor.long(1)
+                val raw = cursor.text(2)
+                val isDup = cursor.long(3) != 0L
+                val row = runCatching { json.decodeFromString<ImportantDealerRow>(raw) }.getOrNull()
+                if (row != null) {
+                    list.add(ManagedListing(id = key, timestamp = ts, row = row.copy(isDuplicate = isDup)))
+                }
+            }
+            list
+        }
+    }
+
+    fun updateListing(id: String, updatedRow: ImportantDealerRow) {
+        val encoded = json.encodeToString(updatedRow)
+        work.execute("BEGIN IMMEDIATE")
+        try {
+            work.execute(
+                "UPDATE listings SET society = ?, dealer = ?, status = ?, fields = ? WHERE dedup_key = ?",
+                listOf(updatedRow.society, updatedRow.dealerName, updatedRow.projectListStatus, encoded, id)
+            )
+            work.execute("COMMIT")
+        } catch (e: Exception) {
+            try { work.execute("ROLLBACK") } catch (_: Exception) {}
+            throw e
+        }
+    }
+
+    fun deleteListing(id: String) {
+        work.execute("BEGIN IMMEDIATE")
+        try {
+            work.execute("DELETE FROM listings WHERE dedup_key = ?", listOf(id))
+            work.execute("COMMIT")
+        } catch (e: Exception) {
+            try { work.execute("ROLLBACK") } catch (_: Exception) {}
+            throw e
+        }
+    }
+
+    fun addListing(row: ImportantDealerRow, timestamp: Long = System.currentTimeMillis()): String {
+        val key = "manual_${System.currentTimeMillis()}_${(1000..9999).random()}"
+        val seq = System.currentTimeMillis()
+        val fullMsg = if (row.fullMessage.isBlank()) {
+            listOf(row.society, row.acco, row.area, row.floor, row.price, row.dealerName, row.phoneNo)
+                .filter { it.isNotBlank() }
+                .joinToString(" ")
+        } else {
+            row.fullMessage
+        }
+        val inRow = row.copy(
+            projectListStatus = "IN",
+            fullMessage = fullMsg
+        )
+        val encoded = json.encodeToString(inRow)
+        work.execute("BEGIN IMMEDIATE")
+        try {
+            work.execute(
+                "INSERT INTO listings (dedup_key, ts, seq, society, dealer, status, fields) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                listOf(key, timestamp, seq, inRow.society, inRow.dealerName, inRow.projectListStatus, encoded)
+            )
+            work.execute("COMMIT")
+        } catch (e: Exception) {
+            try { work.execute("ROLLBACK") } catch (_: Exception) {}
+            throw e
+        }
+        return key
     }
 
     override fun close() {

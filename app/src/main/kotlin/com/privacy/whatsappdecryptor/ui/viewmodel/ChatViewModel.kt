@@ -29,6 +29,8 @@ import java.time.ZoneId
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import com.privacy.whatsappdecryptor.core.inventory.ProjectInventorySummary
+import com.privacy.whatsappdecryptor.core.inventory.ManagedListing
+import com.privacy.whatsappdecryptor.core.inventory.ImportantDealerRow
 
 enum class ExportFormat(val label: String, val extension: String, val mimeType: String) {
     TXT("Plain Text (.txt)", "txt", "text/plain"),
@@ -99,6 +101,18 @@ class ChatViewModel : ViewModel() {
     private val _projectMonths = MutableStateFlow(1L)
     val projectMonths: StateFlow<Long> = _projectMonths.asStateFlow()
 
+    private val _inListings = MutableStateFlow<List<ManagedListing>>(emptyList())
+    val inListings: StateFlow<List<ManagedListing>> = _inListings.asStateFlow()
+
+    private val _inListingsSearchQuery = MutableStateFlow("")
+    val inListingsSearchQuery: StateFlow<String> = _inListingsSearchQuery.asStateFlow()
+
+    private val _inListingsSocietyFilter = MutableStateFlow<String?>(null)
+    val inListingsSocietyFilter: StateFlow<String?> = _inListingsSocietyFilter.asStateFlow()
+
+    private val _isLoadingInListings = MutableStateFlow(false)
+    val isLoadingInListings: StateFlow<Boolean> = _isLoadingInListings.asStateFlow()
+
     fun loadDatabase(file: File) {
         viewModelScope.launch(Dispatchers.IO) {
             _dbState.value = DatabaseState.Loading
@@ -117,7 +131,7 @@ class ChatViewModel : ViewModel() {
 
     private fun loadCachedProjectSummaries(databaseFile: File) {
         viewModelScope.launch(Dispatchers.IO) {
-            val listingsDb = File(databaseFile.parentFile, "active_inventory/listings_1m.db")
+            val listingsDb = File(databaseFile.parentFile, "active_inventory/listings_${_projectMonths.value}m.db")
             val cacheDb = File(databaseFile.parentFile, "inventory_cache/parsed-text.db")
             if (listingsDb.exists() && cacheDb.exists()) {
                 runCatching {
@@ -125,6 +139,10 @@ class ChatViewModel : ViewModel() {
                         AndroidInventorySql(cacheDb).use { cache ->
                             StreamingInventoryStore(work, cache).use { store ->
                                 _projectSummaries.value = store.getProjectSummaries()
+                                _inListings.value = store.getInListings(
+                                    searchQuery = _inListingsSearchQuery.value.takeIf { it.isNotBlank() },
+                                    societyFilter = _inListingsSocietyFilter.value
+                                )
                             }
                         }
                     }
@@ -141,8 +159,115 @@ class ChatViewModel : ViewModel() {
         _projectStatusFilter.value = filter
     }
 
-    fun onProjectMonthsChanged(months: Long) {
+    fun onProjectMonthsChanged(months: Long, context: Context? = null) {
         _projectMonths.value = months
+        context?.let { loadInListings(it, months) }
+    }
+
+    fun onInListingsSearchQueryChanged(query: String, context: Context? = null) {
+        _inListingsSearchQuery.value = query
+        context?.let { loadInListings(it) }
+    }
+
+    fun onInListingsSocietyFilterChanged(society: String?, context: Context? = null) {
+        _inListingsSocietyFilter.value = society
+        context?.let { loadInListings(it) }
+    }
+
+    fun loadInListings(context: Context, months: Long = _projectMonths.value) {
+        val appContext = context.applicationContext
+        viewModelScope.launch(Dispatchers.IO) {
+            _isLoadingInListings.value = true
+            try {
+                val (listingsDb, parsedCacheDb) = getOrCreateActiveStore(appContext, months, false)
+                AndroidInventorySql(listingsDb).use { work ->
+                    AndroidInventorySql(parsedCacheDb).use { cache ->
+                        StreamingInventoryStore(work, cache).use { store ->
+                            _inListings.value = store.getInListings(
+                                searchQuery = _inListingsSearchQuery.value.takeIf { it.isNotBlank() },
+                                societyFilter = _inListingsSocietyFilter.value
+                            )
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                // Ignore or log
+            } finally {
+                _isLoadingInListings.value = false
+            }
+        }
+    }
+
+    fun updateListing(context: Context, id: String, updatedRow: ImportantDealerRow, months: Long = _projectMonths.value) {
+        val appContext = context.applicationContext
+        viewModelScope.launch(Dispatchers.IO) {
+            _isLoadingInListings.value = true
+            try {
+                val (listingsDb, parsedCacheDb) = getOrCreateActiveStore(appContext, months, false)
+                AndroidInventorySql(listingsDb).use { work ->
+                    AndroidInventorySql(parsedCacheDb).use { cache ->
+                        StreamingInventoryStore(work, cache).use { store ->
+                            store.updateListing(id, updatedRow)
+                            _projectSummaries.value = store.getProjectSummaries()
+                            _inListings.value = store.getInListings(
+                                searchQuery = _inListingsSearchQuery.value.takeIf { it.isNotBlank() },
+                                societyFilter = _inListingsSocietyFilter.value
+                            )
+                        }
+                    }
+                }
+            } finally {
+                _isLoadingInListings.value = false
+            }
+        }
+    }
+
+    fun deleteListing(context: Context, id: String, months: Long = _projectMonths.value) {
+        val appContext = context.applicationContext
+        viewModelScope.launch(Dispatchers.IO) {
+            _isLoadingInListings.value = true
+            try {
+                val (listingsDb, parsedCacheDb) = getOrCreateActiveStore(appContext, months, false)
+                AndroidInventorySql(listingsDb).use { work ->
+                    AndroidInventorySql(parsedCacheDb).use { cache ->
+                        StreamingInventoryStore(work, cache).use { store ->
+                            store.deleteListing(id)
+                            _projectSummaries.value = store.getProjectSummaries()
+                            _inListings.value = store.getInListings(
+                                searchQuery = _inListingsSearchQuery.value.takeIf { it.isNotBlank() },
+                                societyFilter = _inListingsSocietyFilter.value
+                            )
+                        }
+                    }
+                }
+            } finally {
+                _isLoadingInListings.value = false
+            }
+        }
+    }
+
+    fun addManualListing(context: Context, row: ImportantDealerRow, months: Long = _projectMonths.value) {
+        val appContext = context.applicationContext
+        viewModelScope.launch(Dispatchers.IO) {
+            _isLoadingInListings.value = true
+            try {
+                val (listingsDb, parsedCacheDb) = getOrCreateActiveStore(appContext, months, false)
+                AndroidInventorySql(listingsDb).use { work ->
+                    AndroidInventorySql(parsedCacheDb).use { cache ->
+                        StreamingInventoryStore(work, cache).use { store ->
+                            store.addListing(row)
+                            _projectSummaries.value = store.getProjectSummaries()
+                            _inListings.value = store.getInListings(
+                                searchQuery = _inListingsSearchQuery.value.takeIf { it.isNotBlank() },
+                                societyFilter = _inListingsSocietyFilter.value
+                            )
+                        }
+                    }
+                }
+            } finally {
+                _isLoadingInListings.value = false
+            }
+        }
     }
 
     fun refreshChats() {
@@ -271,6 +396,10 @@ class ChatViewModel : ViewModel() {
                         store.prepare()
                         val summaries = store.getProjectSummaries()
                         _projectSummaries.value = summaries
+                        _inListings.value = store.getInListings(
+                            searchQuery = _inListingsSearchQuery.value.takeIf { it.isNotBlank() },
+                            societyFilter = _inListingsSocietyFilter.value
+                        )
                     }
                 }
             }
@@ -292,6 +421,10 @@ class ChatViewModel : ViewModel() {
                     AndroidInventorySql(parsedCacheDb).use { cache ->
                         StreamingInventoryStore(work, cache).use { store ->
                             _projectSummaries.value = store.getProjectSummaries()
+                            _inListings.value = store.getInListings(
+                                searchQuery = _inListingsSearchQuery.value.takeIf { it.isNotBlank() },
+                                societyFilter = _inListingsSocietyFilter.value
+                            )
                         }
                     }
                 }
