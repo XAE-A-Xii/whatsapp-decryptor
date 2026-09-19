@@ -205,6 +205,36 @@ class StreamingInventoryStore(private val work: InventorySql, private val cache:
         }
     }
 
+    fun getCuratedInProjectSummaries(): List<ProjectInventorySummary> {
+        val existingSummaries = work.query("""
+            SELECT society, COUNT(*), COUNT(DISTINCT dealer), MAX(ts)
+            FROM listings
+            WHERE status = 'IN'
+            GROUP BY society
+        """) { cursor ->
+            val map = mutableMapOf<String, Triple<Int, Int, Long>>()
+            while (cursor.next()) {
+                val soc = cursor.text(0)
+                val total = cursor.long(1).toInt()
+                val dealers = cursor.long(2).toInt()
+                val maxTs = cursor.long(3)
+                map[soc] = Triple(total, dealers, maxTs)
+            }
+            map
+        }
+
+        return ProjectRegistry.SELECTED_PROJECT_NAMES.map { canonicalName ->
+            val info = existingSummaries[canonicalName]
+            ProjectInventorySummary(
+                society = canonicalName,
+                status = "IN",
+                totalListings = info?.first ?: 0,
+                uniqueDealers = info?.second ?: 0,
+                latestTimestamp = info?.third ?: 0L
+            )
+        }
+    }
+
     fun forEachRowForProject(society: String, consume: (ImportantDealerRow) -> Unit) {
         work.query("""SELECT l.fields, l.seq != (
             SELECT newest.seq FROM listings newest

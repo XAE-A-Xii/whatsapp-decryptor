@@ -29,6 +29,7 @@ import java.time.ZoneId
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import com.privacy.whatsappdecryptor.core.inventory.ProjectInventorySummary
+import com.privacy.whatsappdecryptor.core.inventory.ProjectRegistry
 import com.privacy.whatsappdecryptor.core.inventory.ManagedListing
 import com.privacy.whatsappdecryptor.core.inventory.ImportantDealerRow
 
@@ -104,6 +105,19 @@ class ChatViewModel : ViewModel() {
     private val _inListings = MutableStateFlow<List<ManagedListing>>(emptyList())
     val inListings: StateFlow<List<ManagedListing>> = _inListings.asStateFlow()
 
+    private val _inProjectSummaries = MutableStateFlow<List<ProjectInventorySummary>>(
+        ProjectRegistry.SELECTED_PROJECT_NAMES.map {
+            ProjectInventorySummary(
+                society = it,
+                status = "IN",
+                totalListings = 0,
+                uniqueDealers = 0,
+                latestTimestamp = 0L
+            )
+        }
+    )
+    val inProjectSummaries: StateFlow<List<ProjectInventorySummary>> = _inProjectSummaries.asStateFlow()
+
     private val _inListingsSearchQuery = MutableStateFlow("")
     val inListingsSearchQuery: StateFlow<String> = _inListingsSearchQuery.asStateFlow()
 
@@ -139,6 +153,7 @@ class ChatViewModel : ViewModel() {
                         AndroidInventorySql(cacheDb).use { cache ->
                             StreamingInventoryStore(work, cache).use { store ->
                                 _projectSummaries.value = store.getProjectSummaries()
+                                _inProjectSummaries.value = store.getCuratedInProjectSummaries()
                                 _inListings.value = store.getInListings(
                                     searchQuery = _inListingsSearchQuery.value.takeIf { it.isNotBlank() },
                                     societyFilter = _inListingsSocietyFilter.value
@@ -174,6 +189,7 @@ class ChatViewModel : ViewModel() {
                             AndroidInventorySql(cacheDb).use { cache ->
                                 StreamingInventoryStore(work, cache).use { store ->
                                     _projectSummaries.value = store.getProjectSummaries()
+                                    _inProjectSummaries.value = store.getCuratedInProjectSummaries()
                                     _inListings.value = store.getInListings(
                                         searchQuery = _inListingsSearchQuery.value.takeIf { it.isNotBlank() },
                                         societyFilter = _inListingsSocietyFilter.value
@@ -186,6 +202,9 @@ class ChatViewModel : ViewModel() {
             } else {
                 // Not yet scanned: do NOT auto-scan, clear list so user can tap 'Scan Projects' when ready
                 _projectSummaries.value = emptyList()
+                _inProjectSummaries.value = ProjectRegistry.SELECTED_PROJECT_NAMES.map {
+                    ProjectInventorySummary(it, "IN", 0, 0, 0L)
+                }
                 _inListings.value = emptyList()
             }
         }
@@ -221,6 +240,7 @@ class ChatViewModel : ViewModel() {
                                 societyFilter = _inListingsSocietyFilter.value
                             )
                             _inListings.value = currentIn
+                            _inProjectSummaries.value = store.getCuratedInProjectSummaries()
                             _projectSummaries.value = store.getProjectSummaries()
                         }
                     }
@@ -431,6 +451,7 @@ class ChatViewModel : ViewModel() {
                         store.prepare()
                         val summaries = store.getProjectSummaries()
                         _projectSummaries.value = summaries
+                        _inProjectSummaries.value = store.getCuratedInProjectSummaries()
                         _inListings.value = store.getInListings(
                             searchQuery = _inListingsSearchQuery.value.takeIf { it.isNotBlank() },
                             societyFilter = _inListingsSocietyFilter.value
@@ -637,6 +658,9 @@ class ChatViewModel : ViewModel() {
         _selectedChat.value = null
         _selectedChatIdsForExport.value = emptySet()
         _projectSummaries.value = emptyList()
+        _inProjectSummaries.value = ProjectRegistry.SELECTED_PROJECT_NAMES.map {
+            ProjectInventorySummary(it, "IN", 0, 0, 0L)
+        }
 
         return try {
             if (databaseFile.exists()) {

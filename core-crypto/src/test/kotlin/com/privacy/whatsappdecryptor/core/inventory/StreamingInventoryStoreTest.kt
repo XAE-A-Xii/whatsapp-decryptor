@@ -246,6 +246,25 @@ class StreamingInventoryStoreTest {
             val m3mSummaryAfterDelete = summariesAfterDelete.find { it.society == "M3M CAPITAL" }
             assertNotNull(m3mSummaryAfterDelete)
             assertEquals(1, m3mSummaryAfterDelete.totalListings)
+
+            // 7. Verify getCuratedInProjectSummaries() returns all 54 canonical projects
+            val curated = store.getCuratedInProjectSummaries()
+            assertEquals(ProjectRegistry.SELECTED_PROJECT_NAMES.size, curated.size)
+            assertEquals(54, curated.size)
+            assertTrue(curated.all { it.status == "IN" })
+
+            val m3mCurated = curated.find { it.society == "M3M CAPITAL" }
+            assertNotNull(m3mCurated)
+            assertEquals(1, m3mCurated.totalListings)
+
+            val smartWorldCurated = curated.find { it.society == "SMART WORLD DXP" }
+            assertNotNull(smartWorldCurated)
+            assertEquals(1, smartWorldCurated.totalListings)
+
+            val emptyCurated = curated.find { it.society == "SOBHA VILLA" }
+            assertNotNull(emptyCurated)
+            assertEquals(0, emptyCurated.totalListings)
+            assertEquals(0, emptyCurated.uniqueDealers)
         }
     }
 }

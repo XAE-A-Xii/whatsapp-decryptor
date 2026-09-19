@@ -97,7 +97,7 @@ class MainActivity : ComponentActivity() {
                     val projectMonths by viewModel.projectMonths.collectAsStateWithLifecycle()
 
                     // IN Listings States
-                    val inListings by viewModel.inListings.collectAsStateWithLifecycle()
+                    val inProjectSummaries by viewModel.inProjectSummaries.collectAsStateWithLifecycle()
                     val inListingsSearchQuery by viewModel.inListingsSearchQuery.collectAsStateWithLifecycle()
                     val inListingsSocietyFilter by viewModel.inListingsSocietyFilter.collectAsStateWithLifecycle()
                     val isLoadingInListings by viewModel.isLoadingInListings.collectAsStateWithLifecycle()
@@ -345,20 +345,24 @@ class MainActivity : ComponentActivity() {
 
                                 Screen.IN_LISTINGS -> {
                                     InListingsScreen(
-                                        listings = inListings,
+                                        inProjects = inProjectSummaries,
                                         isLoading = isLoadingInListings,
                                         searchQuery = inListingsSearchQuery,
                                         onSearchQueryChanged = { viewModel.onInListingsSearchQueryChanged(it, this@MainActivity) },
-                                        selectedSociety = inListingsSocietyFilter,
-                                        onSocietyFilterChanged = { viewModel.onInListingsSocietyFilterChanged(it, this@MainActivity) },
-                                        onUpdateListing = { id, updatedRow ->
-                                            viewModel.updateListing(this@MainActivity, id, updatedRow)
+                                        onExportSingleProject = { proj ->
+                                            viewModel.exportSingleProjectSubExcel(this@MainActivity, proj, projectMonths) { shareFile ->
+                                                shareFile(shareFile, "text/csv", "Sub-Excel: ${proj.society}", "Share ${proj.society} Sub-Excel")
+                                            }
                                         },
-                                        onDeleteListing = { id ->
-                                            viewModel.deleteListing(this@MainActivity, id)
+                                        onExportMasterCsv = {
+                                            viewModel.exportMasterPropertyInventory(this@MainActivity, projectMonths) { csvFile ->
+                                                shareFile(csvFile, "text/csv", "Master Property Inventory", "Share Master Inventory CSV")
+                                            }
                                         },
-                                        onAddListing = { newRow ->
-                                            viewModel.addManualListing(this@MainActivity, newRow)
+                                        onExportAllZip = {
+                                            viewModel.exportAllProjectsZip(this@MainActivity, projectMonths) { zipFile ->
+                                                shareFile(zipFile, "application/zip", "All Project Sub-Excels", "Share All Project Sub-Excels (ZIP)")
+                                            }
                                         },
                                         onRefresh = {
                                             viewModel.loadInListings(this@MainActivity)
