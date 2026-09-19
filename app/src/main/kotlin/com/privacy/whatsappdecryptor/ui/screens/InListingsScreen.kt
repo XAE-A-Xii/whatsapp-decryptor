@@ -1,11 +1,8 @@
 package com.privacy.whatsappdecryptor.ui.screens
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -15,12 +12,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.privacy.whatsappdecryptor.core.inventory.ProjectInventorySummary
+import com.privacy.whatsappdecryptor.ui.theme.Spacing
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -105,19 +101,19 @@ fun InListingsScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Global Export & Overview Card
+            // Global Export & Overview Hero Card (60/30/10 structure)
             Card(
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer
                 ),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(Spacing.md),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .padding(horizontal = Spacing.md, vertical = Spacing.xs)
             ) {
                 Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    modifier = Modifier.padding(Spacing.md),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.sm)
                 ) {
                     // Header Metrics
                     Row(
@@ -140,7 +136,7 @@ fun InListingsScreen(
                         }
 
                         Surface(
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(Spacing.xs),
                             color = MaterialTheme.colorScheme.primaryContainer
                         ) {
                             Text(
@@ -148,46 +144,69 @@ fun InListingsScreen(
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                modifier = Modifier.padding(horizontal = Spacing.xs, vertical = Spacing.xxs)
                             )
                         }
                     }
 
-                    // Action Buttons Row: Generate Master Excel & Export All ZIP
+                    // Action Buttons Row: Generate Master Excel & Export All ZIP with 48dp touch targets
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
                     ) {
                         Button(
                             onClick = onExportMasterCsv,
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp)
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp),
+                            shape = RoundedCornerShape(Spacing.sm),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary
+                            )
                         ) {
-                            Icon(Icons.Default.Description, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Master Excel", style = MaterialTheme.typography.labelLarge)
+                            Icon(
+                                Icons.Default.Description,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(Spacing.xs))
+                            Text(
+                                "Master Excel",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
 
                         OutlinedButton(
                             onClick = onExportAllZip,
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp)
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp),
+                            shape = RoundedCornerShape(Spacing.sm)
                         ) {
-                            Icon(Icons.Default.FolderZip, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("All Sub-Excels", style = MaterialTheme.typography.labelLarge)
+                            Icon(
+                                Icons.Default.FolderZip,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(Spacing.xs))
+                            Text(
+                                "All Sub-Excels",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
                     }
                 }
             }
 
-            // Search Bar
+            // Search Bar with 8-pt spacing
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = onSearchQueryChanged,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                    .padding(horizontal = Spacing.md, vertical = Spacing.xxs),
                 placeholder = { Text("Search curated properties (e.g. M3M, DXP, Sobha)…") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 trailingIcon = {
@@ -198,30 +217,37 @@ fun InListingsScreen(
                     }
                 },
                 singleLine = true,
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(Spacing.sm)
             )
 
-            // Filter Chips (All, With Inventory, Empty)
+            // Filter Chips (All, With Inventory, Pending)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(horizontal = Spacing.md, vertical = Spacing.xs),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
             ) {
                 FilterChip(
                     selected = selectedTabFilter == "ALL",
                     onClick = { selectedTabFilter = "ALL" },
-                    label = { Text("All (${inProjects.size})") }
+                    label = { Text("All (${inProjects.size})") },
+                    shape = RoundedCornerShape(Spacing.xs)
                 )
                 FilterChip(
                     selected = selectedTabFilter == "ACTIVE",
                     onClick = { selectedTabFilter = "ACTIVE" },
-                    label = { Text("With Listings ($projectsWithInventory)") }
+                    label = { Text("With Listings ($projectsWithInventory)") },
+                    shape = RoundedCornerShape(Spacing.xs),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
                 )
                 FilterChip(
                     selected = selectedTabFilter == "EMPTY",
                     onClick = { selectedTabFilter = "EMPTY" },
-                    label = { Text("Pending (${inProjects.size - projectsWithInventory})") }
+                    label = { Text("Pending (${inProjects.size - projectsWithInventory})") },
+                    shape = RoundedCornerShape(Spacing.xs)
                 )
             }
 
@@ -229,28 +255,28 @@ fun InListingsScreen(
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
 
-            // Property List
+            // Curated Properties List
             if (filteredProjects.isEmpty() && !isLoading) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(32.dp),
+                        .padding(Spacing.xl),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(Spacing.sm)
                     ) {
                         Surface(
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier.size(64.dp)
+                            modifier = Modifier.size(Spacing.huge)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
                                     Icons.Default.Apartment,
                                     contentDescription = null,
-                                    modifier = Modifier.size(32.dp),
+                                    modifier = Modifier.size(Spacing.xl),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
@@ -270,7 +296,11 @@ fun InListingsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         if (searchQuery.isNotEmpty()) {
-                            Button(onClick = { onSearchQueryChanged("") }) {
+                            Button(
+                                onClick = { onSearchQueryChanged("") },
+                                shape = RoundedCornerShape(Spacing.sm),
+                                modifier = Modifier.height(48.dp)
+                            ) {
                                 Text("Clear Search")
                             }
                         }
@@ -279,8 +309,8 @@ fun InListingsScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.xs),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
                     items(filteredProjects, key = { it.society }) { project ->
                         CuratedPropertyCard(
@@ -304,33 +334,33 @@ private fun CuratedPropertyCard(
 
     ElevatedCard(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(Spacing.md),
         colors = CardDefaults.elevatedCardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.5.dp)
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
+                .padding(Spacing.md),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             // Society Information
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
                 modifier = Modifier.weight(1f)
             ) {
                 Surface(
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(Spacing.sm),
                     color = if (hasListings) {
                         MaterialTheme.colorScheme.primaryContainer
                     } else {
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                        MaterialTheme.colorScheme.surfaceVariant
                     },
-                    modifier = Modifier.size(44.dp)
+                    modifier = Modifier.size(Spacing.xxl)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
@@ -341,7 +371,7 @@ private fun CuratedPropertyCard(
                             } else {
                                 MaterialTheme.colorScheme.onSurfaceVariant
                             },
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(Spacing.lg)
                         )
                     }
                 }
@@ -356,10 +386,10 @@ private fun CuratedPropertyCard(
                         overflow = TextOverflow.Ellipsis
                     )
 
-                    Spacer(Modifier.height(3.dp))
+                    Spacer(Modifier.height(Spacing.xxs))
 
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (hasListings) {
@@ -390,34 +420,35 @@ private fun CuratedPropertyCard(
                                         ListingDateFormatter.format(Instant.ofEpochMilli(project.latestTimestamp))
                                     }.getOrDefault(""),
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         } else {
                             Text(
                                 text = "0 extracted listings",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
                 }
             }
 
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(Spacing.xs))
 
-            // Export Sub-Excel Action Button
+            // Export Sub-Excel Action Button (accessible 40dp height, thumb tap friendly)
             FilledTonalButton(
                 onClick = onExportSubExcel,
-                shape = RoundedCornerShape(10.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                shape = RoundedCornerShape(Spacing.sm),
+                contentPadding = PaddingValues(horizontal = Spacing.sm, vertical = Spacing.xs),
+                modifier = Modifier.height(40.dp)
             ) {
                 Icon(
                     Icons.Default.FileDownload,
                     contentDescription = null,
                     modifier = Modifier.size(16.dp)
                 )
-                Spacer(Modifier.width(4.dp))
+                Spacer(Modifier.width(Spacing.xxs))
                 Text(
                     text = "Sub-Excel",
                     style = MaterialTheme.typography.labelMedium,
@@ -427,3 +458,4 @@ private fun CuratedPropertyCard(
         }
     }
 }
+

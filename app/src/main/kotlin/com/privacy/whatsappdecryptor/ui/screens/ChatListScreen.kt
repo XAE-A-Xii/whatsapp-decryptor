@@ -21,12 +21,32 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.privacy.whatsappdecryptor.core.database.model.ChatSummary
+import com.privacy.whatsappdecryptor.ui.theme.Spacing
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlin.math.absoluteValue
 
 private val ChatDateFormatter = DateTimeFormatter.ofPattern("MMM d, yyyy")
     .withZone(ZoneId.systemDefault())
+
+// Curated avatar palette for visual distinction
+private val AvatarColors = listOf(
+    Color(0xFF00796B), // Teal
+    Color(0xFF303F9F), // Indigo
+    Color(0xFFC2185B), // Pink
+    Color(0xFFE64A19), // Deep Orange
+    Color(0xFF512DA8), // Deep Purple
+    Color(0xFF0097A7), // Cyan
+    Color(0xFF388E3C), // Green
+    Color(0xFFAFB42B), // Lime/Olive
+    Color(0xFF5D4037)  // Brown
+)
+
+private fun getAvatarColor(seed: String): Color {
+    val index = seed.hashCode().absoluteValue % AvatarColors.size
+    return AvatarColors[index]
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,7 +76,13 @@ fun ChatListScreen(
         topBar = {
             if (isMultiSelectMode) {
                 TopAppBar(
-                    title = { Text("${selectedChatIds.size} selected") },
+                    title = {
+                        Text(
+                            "${selectedChatIds.size} selected",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
                     navigationIcon = {
                         IconButton(onClick = onClearSelection) {
                             Icon(Icons.Default.Close, contentDescription = "Clear Selection")
@@ -64,7 +90,11 @@ fun ChatListScreen(
                     },
                     actions = {
                         TextButton(onClick = onSelectAll) {
-                            Text("Select All", color = MaterialTheme.colorScheme.primary)
+                            Text(
+                                "Select All",
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
                         IconButton(onClick = onExportSelected) {
                             Icon(Icons.Default.FileDownload, contentDescription = "Export Selected")
@@ -92,7 +122,11 @@ fun ChatListScreen(
                                 modifier = Modifier.fillMaxWidth()
                             )
                         } else {
-                            Text("Decrypted Chats", fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "Decrypted Chats",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleMedium
+                            )
                         }
                     },
                     actions = {
@@ -121,14 +155,14 @@ fun ChatListScreen(
         bottomBar = {
             AnimatedVisibility(visible = isMultiSelectMode) {
                 Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    color = MaterialTheme.colorScheme.surfaceContainer,
                     tonalElevation = 6.dp,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 12.dp),
+                            .padding(horizontal = Spacing.md, vertical = Spacing.sm),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -139,11 +173,19 @@ fun ChatListScreen(
                         )
                         Button(
                             onClick = onExportSelected,
-                            shape = RoundedCornerShape(10.dp)
+                            shape = RoundedCornerShape(Spacing.sm),
+                            modifier = Modifier.height(48.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary
+                            )
                         ) {
-                            Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Export")
+                            Icon(
+                                Icons.Default.FileDownload,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(Spacing.xs))
+                            Text("Export", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -166,13 +208,20 @@ fun ChatListScreen(
             is com.privacy.whatsappdecryptor.ui.viewmodel.InventoryExportState.Complete -> {
                 AlertDialog(
                     onDismissRequest = onDismissInventoryDialog,
-                    icon = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(36.dp)) },
+                    icon = {
+                        Icon(
+                            Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(Spacing.xl)
+                        )
+                    },
                     title = { Text("Inventory Export Ready!", fontWeight = FontWeight.Bold) },
                     text = {
                         Text("Successfully extracted ${state.totalRows} property listings (${state.targetInCount} in target projects).\n\nOpening share sheet for WhatsApp...")
                     },
                     confirmButton = {
-                        Button(onClick = onDismissInventoryDialog) {
+                        Button(onClick = onDismissInventoryDialog, shape = RoundedCornerShape(Spacing.sm)) {
                             Text("OK")
                         }
                     }
@@ -181,11 +230,18 @@ fun ChatListScreen(
             is com.privacy.whatsappdecryptor.ui.viewmodel.InventoryExportState.Error -> {
                 AlertDialog(
                     onDismissRequest = onDismissInventoryDialog,
-                    icon = { Icon(Icons.Default.Error, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                    icon = {
+                        Icon(
+                            Icons.Default.Error,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(Spacing.xl)
+                        )
+                    },
                     title = { Text("Export Failed", fontWeight = FontWeight.Bold) },
                     text = { Text(state.message) },
                     confirmButton = {
-                        Button(onClick = onDismissInventoryDialog) {
+                        Button(onClick = onDismissInventoryDialog, shape = RoundedCornerShape(Spacing.sm)) {
                             Text("Dismiss")
                         }
                     }
@@ -199,39 +255,39 @@ fun ChatListScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Quick shortcut to Project Sub-Excels
+            // Quick shortcut to Project Sub-Excels Hero Card
             Card(
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
                 ),
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(Spacing.md),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                    .padding(horizontal = Spacing.md, vertical = Spacing.xs),
                 onClick = onNavigateToProjects
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                        .padding(horizontal = Spacing.md, vertical = Spacing.sm),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
                     ) {
                         Surface(
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(36.dp)
+                            modifier = Modifier.size(Spacing.xl)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
                                     Icons.Default.Domain,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onPrimary,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         }
@@ -256,18 +312,18 @@ fun ChatListScreen(
                 }
             }
 
-            // Filter chips
+            // Filter chips with 8-pt spacing
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(horizontal = Spacing.md, vertical = Spacing.xxs),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
             ) {
                 FilterChip(
                     selected = !onlyGroups,
                     onClick = { onFilterGroupsChanged(false) },
-                    label = { Text("All Chats") },
-                    shape = RoundedCornerShape(20.dp)
+                    label = { Text("All Chats (${chats.size})") },
+                    shape = RoundedCornerShape(Spacing.xs)
                 )
                 FilterChip(
                     selected = onlyGroups,
@@ -276,28 +332,35 @@ fun ChatListScreen(
                     leadingIcon = if (onlyGroups) {
                         { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
                     } else null,
-                    shape = RoundedCornerShape(20.dp)
+                    shape = RoundedCornerShape(Spacing.xs),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
                 )
             }
 
-            Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                modifier = Modifier.padding(top = Spacing.xxs)
+            )
 
             if (chats.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(32.dp),
+                        .padding(Spacing.xl),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(Spacing.sm)
                     ) {
                         Icon(
                             imageVector = Icons.Default.ChatBubbleOutline,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(48.dp)
+                            modifier = Modifier.size(Spacing.xxl)
                         )
                         Text(
                             text = if (searchQuery.isNotBlank()) "No chats match \"$searchQuery\"" else "No chats available",
@@ -326,9 +389,9 @@ fun ChatListScreen(
                                 onToggleChatSelection(chat.id)
                             }
                         )
-                        Divider(
+                        HorizontalDivider(
                             color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f),
-                            modifier = Modifier.padding(start = 76.dp)
+                            modifier = Modifier.padding(start = 72.dp)
                         )
                     }
                 }
@@ -346,6 +409,10 @@ private fun ChatListItem(
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
+    val avatarBg = remember(chat.title, chat.rawJid) {
+        getAvatarColor(chat.title.ifEmpty { chat.rawJid })
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -354,39 +421,54 @@ private fun ChatListItem(
                 onLongClick = onLongClick
             )
             .background(
-                if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
                 else Color.Transparent
             )
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = Spacing.md, vertical = Spacing.sm),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (isMultiSelectMode) {
             Checkbox(
                 checked = isSelected,
                 onCheckedChange = { onClick() },
-                modifier = Modifier.padding(end = 12.dp)
+                modifier = Modifier.padding(end = Spacing.sm)
             )
         }
 
-        // Avatar
+        // Distinct Avatar with Material/Pastel tone
         Box(
             modifier = Modifier
                 .size(48.dp)
                 .clip(CircleShape)
-                .background(
-                    if (chat.isGroup) MaterialTheme.colorScheme.secondary
-                    else MaterialTheme.colorScheme.surfaceVariant
-                ),
+                .background(avatarBg),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = if (chat.isGroup) Icons.Default.Groups else Icons.Default.Person,
-                contentDescription = null,
-                tint = if (chat.isGroup) MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            val initial = chat.title.firstOrNull()?.uppercaseChar()
+            if (chat.isGroup) {
+                Icon(
+                    imageVector = Icons.Default.Groups,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+            } else if (initial != null && initial.isLetterOrDigit()) {
+                Text(
+                    text = initial.toString(),
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Default.Person,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
         }
 
-        Spacer(modifier = Modifier.width(14.dp))
+        Spacer(modifier = Modifier.width(Spacing.sm))
 
         Column(modifier = Modifier.weight(1f)) {
             Row(
@@ -415,7 +497,7 @@ private fun ChatListItem(
                 }
             }
 
-            Spacer(modifier = Modifier.height(3.dp))
+            Spacer(modifier = Modifier.height(Spacing.xxs))
 
             Text(
                 text = chat.rawJid,
@@ -427,3 +509,4 @@ private fun ChatListItem(
         }
     }
 }
+

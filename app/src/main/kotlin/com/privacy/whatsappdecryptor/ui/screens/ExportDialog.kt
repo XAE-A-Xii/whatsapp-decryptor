@@ -1,6 +1,6 @@
 package com.privacy.whatsappdecryptor.ui.screens
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.privacy.whatsappdecryptor.ui.theme.Spacing
 import com.privacy.whatsappdecryptor.ui.viewmodel.ExportFormat
 
 @Composable
@@ -30,12 +31,19 @@ fun ExportDialog(
             Icon(
                 imageVector = Icons.Default.FileDownload,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(Spacing.xl)
             )
         },
-        title = { Text("Export Chat History", fontWeight = FontWeight.Bold) },
+        title = {
+            Text(
+                "Export Chat History",
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleMedium
+            )
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
                 Text(
                     text = exportTargetDescription,
                     style = MaterialTheme.typography.bodyMedium,
@@ -68,13 +76,21 @@ fun ExportDialog(
         confirmButton = {
             Button(
                 onClick = { onConfirmExport(selectedFormat) },
-                shape = RoundedCornerShape(8.dp)
+                shape = RoundedCornerShape(Spacing.sm),
+                modifier = Modifier.height(48.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary
+                )
             ) {
-                Text("Save to Device...")
+                Text("Save to Device...", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
-            OutlinedButton(onClick = onDismiss) {
+            OutlinedButton(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(Spacing.sm),
+                modifier = Modifier.height(48.dp)
+            ) {
                 Text("Cancel")
             }
         }
@@ -91,17 +107,17 @@ private fun ExportFormatOption(
 ) {
     Surface(
         onClick = onSelect,
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(Spacing.sm),
         color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
         else MaterialTheme.colorScheme.surfaceVariant,
-        border = if (isSelected) androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
+        border = if (isSelected) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
         else null,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(Spacing.sm),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
         ) {
             RadioButton(
                 selected = isSelected,
@@ -127,3 +143,4 @@ private fun ExportFormatOption(
         }
     }
 }
+

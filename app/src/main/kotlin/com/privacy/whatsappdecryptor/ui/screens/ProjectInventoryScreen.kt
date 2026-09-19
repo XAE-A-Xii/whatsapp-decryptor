@@ -1,7 +1,6 @@
 package com.privacy.whatsappdecryptor.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -20,8 +19,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.privacy.whatsappdecryptor.core.inventory.ProjectInventorySummary
+import com.privacy.whatsappdecryptor.ui.theme.Spacing
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -142,21 +141,21 @@ fun ProjectInventoryScreen(
             // Control Header: Month selector & Global export actions
             Card(
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer
                 ),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(Spacing.md),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .padding(horizontal = Spacing.md, vertical = Spacing.xs)
             ) {
                 Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    modifier = Modifier.padding(Spacing.md),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.sm)
                 ) {
                     // Timeframe Window Segmented Pill Control
                     Column(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                        verticalArrangement = Arrangement.spacedBy(Spacing.xxs)
                     ) {
                         Text(
                             text = "Timeframe Window",
@@ -166,27 +165,27 @@ fun ProjectInventoryScreen(
                         )
 
                         Surface(
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(Spacing.sm),
                             color = MaterialTheme.colorScheme.surfaceContainerHigh,
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(4.dp),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    .padding(Spacing.xxs),
+                                horizontalArrangement = Arrangement.spacedBy(Spacing.xxs)
                             ) {
                                 listOf(1L to "Past 1 Month", 3L to "Past 3 Months").forEach { (months, label) ->
                                     val isSelected = selectedMonths == months
                                     Surface(
                                         onClick = { onMonthsChanged(months) },
-                                        shape = RoundedCornerShape(8.dp),
+                                        shape = RoundedCornerShape(Spacing.xs),
                                         color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
                                         contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.weight(1f)
                                     ) {
                                         Box(
-                                            modifier = Modifier.padding(vertical = 8.dp),
+                                            modifier = Modifier.padding(vertical = Spacing.xs),
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Text(
@@ -201,43 +200,51 @@ fun ProjectInventoryScreen(
                         }
                     }
 
-                    // Action Buttons: Scan / Zip / Master
+                    // Action Buttons: Scan / Zip / Master with 48dp touch targets
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
                     ) {
                         Button(
                             onClick = { onScanProjects(selectedMonths) },
                             enabled = !isScanning,
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(Spacing.sm),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                         ) {
                             Icon(
                                 imageVector = if (projectSummaries.isEmpty()) Icons.Default.PlayArrow else Icons.Default.Refresh,
                                 contentDescription = null,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(18.dp)
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(if (projectSummaries.isEmpty()) "Scan Projects" else "Rescan")
+                            Spacer(modifier = Modifier.width(Spacing.xs))
+                            Text(
+                                if (projectSummaries.isEmpty()) "Scan Projects" else "Rescan",
+                                fontWeight = FontWeight.Bold
+                            )
                         }
 
                         if (projectSummaries.isNotEmpty()) {
                             OutlinedButton(
                                 onClick = onExportAllZip,
                                 enabled = !isScanning,
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.weight(1f)
+                                shape = RoundedCornerShape(Spacing.sm),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(48.dp)
                             ) {
-                                Icon(Icons.Default.Archive, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("ZIP All")
+                                Icon(Icons.Default.Archive, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(Spacing.xs))
+                                Text("ZIP All", fontWeight = FontWeight.SemiBold)
                             }
 
                             FilledTonalIconButton(
                                 onClick = onExportMasterCsv,
                                 enabled = !isScanning,
-                                shape = RoundedCornerShape(10.dp)
+                                shape = RoundedCornerShape(Spacing.sm),
+                                modifier = Modifier.size(48.dp)
                             ) {
                                 Icon(Icons.Default.Share, contentDescription = "Export Master CSV")
                             }
@@ -248,14 +255,14 @@ fun ProjectInventoryScreen(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                                .padding(vertical = Spacing.xxs),
+                            verticalArrangement = Arrangement.spacedBy(Spacing.xxs)
                         ) {
                             LinearProgressIndicator(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(6.dp)
-                                    .clip(RoundedCornerShape(3.dp)),
+                                    .height(Spacing.xs)
+                                    .clip(RoundedCornerShape(Spacing.xxs)),
                                 color = MaterialTheme.colorScheme.primary
                             )
                             Text(
@@ -274,20 +281,20 @@ fun ProjectInventoryScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        .padding(horizontal = Spacing.md, vertical = Spacing.xxs),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
                     FilterChip(
                         selected = statusFilter == "ALL",
                         onClick = { onStatusFilterChanged("ALL") },
                         label = { Text("All (${projectSummaries.size})") },
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(Spacing.xs)
                     )
                     FilterChip(
                         selected = statusFilter == "IN",
                         onClick = { onStatusFilterChanged("IN") },
                         label = { Text("Target IN (${totalTargetProjects})") },
-                        shape = RoundedCornerShape(8.dp),
+                        shape = RoundedCornerShape(Spacing.xs),
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                             selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -297,7 +304,7 @@ fun ProjectInventoryScreen(
                         selected = statusFilter == "OUT",
                         onClick = { onStatusFilterChanged("OUT") },
                         label = { Text("Other (${projectSummaries.size - totalTargetProjects})") },
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(Spacing.xs)
                     )
                 }
             }
@@ -307,16 +314,16 @@ fun ProjectInventoryScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(24.dp),
+                        .padding(Spacing.lg),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                        verticalArrangement = Arrangement.spacedBy(Spacing.md)
                     ) {
                         CircularProgressIndicator(
                             color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(48.dp)
+                            modifier = Modifier.size(Spacing.xxl)
                         )
                         Text(
                             text = "Analyzing WhatsApp Messages…",
@@ -335,12 +342,12 @@ fun ProjectInventoryScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(24.dp),
+                        .padding(Spacing.lg),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(Spacing.sm)
                     ) {
                         Surface(
                             shape = CircleShape,
@@ -367,14 +374,14 @@ fun ProjectInventoryScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(Spacing.xs))
                         Button(
                             onClick = { onScanProjects(selectedMonths) },
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(Spacing.sm),
                             modifier = Modifier.height(48.dp)
                         ) {
                             Icon(Icons.Default.PlayArrow, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(Spacing.xs))
                             Text("Scan & Generate Sub-Excels", fontWeight = FontWeight.Bold)
                         }
                     }
@@ -383,7 +390,7 @@ fun ProjectInventoryScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(32.dp),
+                        .padding(Spacing.xl),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -395,8 +402,8 @@ fun ProjectInventoryScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.xs),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
                     items(filteredProjects, key = { it.society }) { project ->
                         ProjectCard(
@@ -429,12 +436,12 @@ private fun ProjectCard(
             else
                 MaterialTheme.colorScheme.surfaceContainer
         ),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(Spacing.md),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier.padding(Spacing.md),
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
         ) {
             // Header Row: Society name & Target Badge
             Row(
@@ -451,7 +458,7 @@ private fun ProjectCard(
                         overflow = TextOverflow.Ellipsis
                     )
                     if (formattedDate.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(2.dp))
+                        Spacer(modifier = Modifier.height(Spacing.xxs))
                         Text(
                             text = "Latest: $formattedDate",
                             style = MaterialTheme.typography.labelSmall,
@@ -460,19 +467,19 @@ private fun ProjectCard(
                     }
                 }
 
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(Spacing.xs))
 
                 Surface(
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(Spacing.xs),
                     color = if (isTarget)
                         MaterialTheme.colorScheme.primaryContainer
                     else
                         MaterialTheme.colorScheme.surfaceContainerHighest
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        modifier = Modifier.padding(horizontal = Spacing.xs, vertical = Spacing.xxs),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.xxs)
                     ) {
                         if (isTarget) {
                             Icon(
@@ -498,12 +505,12 @@ private fun ProjectCard(
             // Metrics: Listings count & Unique Dealers
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.md),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xxs)
                 ) {
                     Icon(
                         Icons.Default.Article,
@@ -520,7 +527,7 @@ private fun ProjectCard(
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xxs)
                 ) {
                     Icon(
                         Icons.Default.People,
@@ -536,20 +543,23 @@ private fun ProjectCard(
                 }
             }
 
-            // Export Sub-Excel Button
+            // Export Sub-Excel Button with 44dp height for thumb zone
             FilledTonalButton(
                 onClick = onExportSubExcel,
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.fillMaxWidth()
+                shape = RoundedCornerShape(Spacing.sm),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp)
             ) {
                 Icon(
                     Icons.Default.FileDownload,
                     contentDescription = null,
                     modifier = Modifier.size(18.dp)
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(Spacing.xs))
                 Text("Export Sub-Excel (.csv)", fontWeight = FontWeight.SemiBold)
             }
         }
     }
 }
+

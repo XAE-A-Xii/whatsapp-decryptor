@@ -237,43 +237,70 @@ class MainActivity : ComponentActivity() {
                         bottomBar = {
                             if (isDashboard && selectedChatIds.isEmpty()) {
                                 NavigationBar(
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                                    tonalElevation = 4.dp
                                 ) {
+                                    val navColors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        selectedTextColor = MaterialTheme.colorScheme.primary,
+                                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+
                                     NavigationBarItem(
                                         selected = currentScreen == Screen.PROJECTS,
                                         onClick = { currentScreen = Screen.PROJECTS },
                                         icon = {
-                                            Icon(
-                                                Icons.Default.Apartment,
-                                                contentDescription = "Projects"
-                                            )
+                                             Icon(
+                                                 Icons.Default.Apartment,
+                                                 contentDescription = "Projects"
+                                             )
                                         },
-                                        label = { Text("Projects") }
+                                        label = {
+                                             Text(
+                                                 "Projects",
+                                                 fontWeight = if (currentScreen == Screen.PROJECTS) FontWeight.Bold else FontWeight.Normal
+                                             )
+                                        },
+                                        colors = navColors
                                     )
                                     NavigationBarItem(
                                         selected = currentScreen == Screen.IN_LISTINGS,
                                         onClick = {
-                                            currentScreen = Screen.IN_LISTINGS
-                                            viewModel.loadInListings(this@MainActivity)
+                                             currentScreen = Screen.IN_LISTINGS
+                                             viewModel.loadInListings(this@MainActivity)
                                         },
                                         icon = {
-                                            Icon(
-                                                Icons.Default.FormatListBulleted,
-                                                contentDescription = "IN Listings"
-                                            )
+                                             Icon(
+                                                 Icons.Default.FormatListBulleted,
+                                                 contentDescription = "IN Listings"
+                                             )
                                         },
-                                        label = { Text("IN Listings") }
+                                        label = {
+                                             Text(
+                                                 "IN Listings",
+                                                 fontWeight = if (currentScreen == Screen.IN_LISTINGS) FontWeight.Bold else FontWeight.Normal
+                                             )
+                                        },
+                                        colors = navColors
                                     )
                                     NavigationBarItem(
                                         selected = currentScreen == Screen.CHAT_LIST,
                                         onClick = { currentScreen = Screen.CHAT_LIST },
                                         icon = {
-                                            Icon(
-                                                Icons.Default.Chat,
-                                                contentDescription = "Chats"
-                                            )
+                                             Icon(
+                                                 Icons.Default.Chat,
+                                                 contentDescription = "Chats"
+                                             )
                                         },
-                                        label = { Text("Chats") }
+                                        label = {
+                                             Text(
+                                                 "Chats",
+                                                 fontWeight = if (currentScreen == Screen.CHAT_LIST) FontWeight.Bold else FontWeight.Normal
+                                             )
+                                        },
+                                        colors = navColors
                                     )
                                 }
                             }

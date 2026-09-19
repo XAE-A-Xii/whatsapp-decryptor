@@ -21,14 +21,12 @@ import androidx.compose.ui.unit.sp
 import com.privacy.whatsappdecryptor.core.database.model.ChatMessage
 import com.privacy.whatsappdecryptor.core.database.model.ChatSummary
 import com.privacy.whatsappdecryptor.core.database.model.WhatsAppMessageType
+import com.privacy.whatsappdecryptor.ui.theme.Spacing
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 private val TimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
-    .withZone(ZoneId.systemDefault())
-
-private val DateDividerFormatter = DateTimeFormatter.ofPattern("MMMM d, yyyy")
     .withZone(ZoneId.systemDefault())
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -48,7 +46,7 @@ fun ChatDetailScreen(
                     Column {
                         Text(
                             text = chat.title,
-                            fontWeight = FontWeight.SemiBold,
+                            fontWeight = FontWeight.Bold,
                             maxLines = 1,
                             style = MaterialTheme.typography.titleMedium
                         )
@@ -103,8 +101,8 @@ fun ChatDetailScreen(
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                            .padding(horizontal = Spacing.sm, vertical = Spacing.xs),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.xs)
                     ) {
                         items(messages, key = { it.id }) { msg ->
                             MessageBubble(message = msg, isGroup = chat.isGroup)
@@ -123,20 +121,34 @@ private fun MessageBubble(
 ) {
     val isMe = message.isFromMe
 
-    // WhatsApp bubble styling
+    // WhatsApp bubble styling adhering to 60/30/10 colors
     val bubbleColor = if (isMe) {
-        // WhatsApp outgoing green
-        Color(0xFF005C4B)
+        MaterialTheme.colorScheme.primaryContainer
     } else {
         MaterialTheme.colorScheme.surfaceVariant
     }
 
-    val textColor = if (isMe) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-
-    val shape = if (isMe) {
-        RoundedCornerShape(topStart = 14.dp, topEnd = 2.dp, bottomStart = 14.dp, bottomEnd = 14.dp)
+    val textColor = if (isMe) {
+        MaterialTheme.colorScheme.onPrimaryContainer
     } else {
-        RoundedCornerShape(topStart = 2.dp, topEnd = 14.dp, bottomStart = 14.dp, bottomEnd = 14.dp)
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    // 8-point asymmetric bubble corner radii
+    val shape = if (isMe) {
+        RoundedCornerShape(
+            topStart = Spacing.md,
+            topEnd = Spacing.xxs,
+            bottomStart = Spacing.md,
+            bottomEnd = Spacing.md
+        )
+    } else {
+        RoundedCornerShape(
+            topStart = Spacing.xxs,
+            topEnd = Spacing.md,
+            bottomStart = Spacing.md,
+            bottomEnd = Spacing.md
+        )
     }
 
     val timeString = if (message.timestampMs > 0) {
@@ -151,9 +163,9 @@ private fun MessageBubble(
             color = bubbleColor,
             shape = shape,
             tonalElevation = 1.dp,
-            modifier = Modifier.widthIn(min = 60.dp, max = 320.dp)
+            modifier = Modifier.widthIn(min = 64.dp, max = 320.dp)
         ) {
-            Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+            Column(modifier = Modifier.padding(horizontal = Spacing.sm, vertical = Spacing.xs)) {
                 // In groups, show sender name for incoming messages
                 if (isGroup && !isMe) {
                     Text(
@@ -161,23 +173,23 @@ private fun MessageBubble(
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(bottom = 2.dp)
+                        modifier = Modifier.padding(bottom = Spacing.xxs)
                     )
                 }
 
                 // Non-text message type indicator badge
                 if (message.messageType != WhatsAppMessageType.TEXT) {
                     Surface(
-                        color = Color.Black.copy(alpha = 0.2f),
-                        shape = RoundedCornerShape(4.dp),
-                        modifier = Modifier.padding(bottom = 4.dp)
+                        color = Color.Black.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(Spacing.xxs),
+                        modifier = Modifier.padding(bottom = Spacing.xxs)
                     ) {
                         Text(
                             text = "[${message.messageType.label}]",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Medium,
                             color = textColor.copy(alpha = 0.9f),
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            modifier = Modifier.padding(horizontal = Spacing.xs, vertical = Spacing.xxs)
                         )
                     }
                 }
@@ -202,10 +214,11 @@ private fun MessageBubble(
                         textAlign = TextAlign.End,
                         modifier = Modifier
                             .align(Alignment.End)
-                            .padding(top = 2.dp)
+                            .padding(top = Spacing.xxs)
                     )
                 }
             }
         }
     }
 }
+
