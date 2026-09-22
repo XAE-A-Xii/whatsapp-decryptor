@@ -128,8 +128,82 @@ object ProjectRegistry {
         ProjectPattern(Regex("\\bWESTIN\\b", RegexOption.IGNORE_CASE), "WESTIN")
     )
 
+    data class CustomProject(
+        val canonicalName: String,
+        val aliases: List<String> = emptyList()
+    )
+
+    private val customProjects = java.util.concurrent.CopyOnWriteArrayList<CustomProject>()
+    @Volatile
+    private var customPatterns: List<ProjectPattern> = emptyList()
+
+    fun getAllTargetProjectNames(): List<String> {
+        val customNames = customProjects.map { it.canonicalName }
+        return SELECTED_PROJECT_NAMES + customNames.filter { it !in SELECTED_PROJECT_NAMES }
+    }
+
+    fun getCustomProjects(): List<CustomProject> = customProjects.toList()
+
+    fun isCustomProject(name: String): Boolean {
+        val clean = name.trim().uppercase()
+        return customProjects.any { it.canonicalName.equals(clean, ignoreCase = true) }
+    }
+
+    fun addCustomProject(name: String, aliases: List<String> = emptyList()): Boolean {
+        val clean = name.trim().uppercase()
+        if (clean.isBlank()) return false
+        if (SELECTED_PROJECT_NAMES.any { it.equals(clean, ignoreCase = true) }) return false
+        customProjects.removeIf { it.canonicalName.equals(clean, ignoreCase = true) }
+        val cleanAliases = aliases.map { it.trim() }.filter { it.isNotBlank() }
+        customProjects.add(CustomProject(clean, cleanAliases))
+        rebuildCustomPatterns()
+        return true
+    }
+
+    fun removeCustomProject(name: String): Boolean {
+        val clean = name.trim().uppercase()
+        val removed = customProjects.removeIf { it.canonicalName.equals(clean, ignoreCase = true) }
+        if (removed) rebuildCustomPatterns()
+        return removed
+    }
+
+    fun setCustomProjects(list: List<CustomProject>) {
+        customProjects.clear()
+        list.forEach { proj ->
+            val clean = proj.canonicalName.trim().uppercase()
+            if (clean.isNotBlank() && !SELECTED_PROJECT_NAMES.any { it.equals(clean, ignoreCase = true) }) {
+                customProjects.add(CustomProject(clean, proj.aliases.map { it.trim() }.filter { it.isNotBlank() }))
+            }
+        }
+        rebuildCustomPatterns()
+    }
+
+    private fun rebuildCustomPatterns() {
+        val patterns = mutableListOf<ProjectPattern>()
+        for (cp in customProjects) {
+            val canonicalWords = cp.canonicalName.split("\\s+".toRegex()).filter { it.isNotBlank() }
+            if (canonicalWords.isNotEmpty()) {
+                val escapedRegex = "\\b" + canonicalWords.joinToString("\\s+") { Regex.escape(it) } + "\\b"
+                patterns.add(ProjectPattern(Regex(escapedRegex, RegexOption.IGNORE_CASE), cp.canonicalName))
+            }
+            for (alias in cp.aliases) {
+                val aliasWords = alias.split("\\s+".toRegex()).filter { it.isNotBlank() }
+                if (aliasWords.isNotEmpty()) {
+                    val escapedAlias = "\\b" + aliasWords.joinToString("\\s+") { Regex.escape(it) } + "\\b"
+                    patterns.add(ProjectPattern(Regex(escapedAlias, RegexOption.IGNORE_CASE), cp.canonicalName))
+                }
+            }
+        }
+        customPatterns = patterns
+    }
+
     fun findCanonicalProjectInText(text: String?): String {
         if (text.isNullOrBlank()) return ""
+        for (item in customPatterns) {
+            if (item.regex.containsMatchIn(text)) {
+                return item.canonical
+            }
+        }
         for (item in FULL_TEXT_CANONICAL_PATTERNS) {
             if (item.regex.containsMatchIn(text)) {
                 return item.canonical
@@ -141,6 +215,17 @@ object ProjectRegistry {
     fun canonicalSelectedProject(value: String?): String {
         val p = normalizeProjectName(value)
         if (p.isEmpty()) return ""
+
+        for (cp in customProjects) {
+            val normCp = normalizeProjectName(cp.canonicalName)
+            if (p == normCp || p.contains(normCp)) return cp.canonicalName
+            for (alias in cp.aliases) {
+                val normAlias = normalizeProjectName(alias)
+                if (normAlias.isNotEmpty() && (p == normAlias || p.contains(normAlias))) {
+                    return cp.canonicalName
+                }
+            }
+        }
 
         fun has(vararg parts: String): Boolean = parts.all { p.contains(it) }
 

@@ -16,12 +16,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.privacy.whatsappdecryptor.core.inventory.ProjectInventorySummary
+import com.privacy.whatsappdecryptor.core.inventory.ProjectRegistry
 import com.privacy.whatsappdecryptor.ui.theme.Spacing
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-private val ListingDateFormatter = DateTimeFormatter.ofPattern("MMM d, yyyy")
+private val ListingDateFormatter = DateTimeFormatter.ofPattern("d MMM, HH:mm")
     .withZone(ZoneId.systemDefault())
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -34,6 +35,8 @@ fun InListingsScreen(
     searchQuery: String,
     onSearchQueryChanged: (String) -> Unit,
     onScanProjects: () -> Unit = {},
+    onAddSociety: (String, List<String>) -> Unit = { _, _ -> },
+    onRemoveCustomSociety: (String) -> Unit = {},
     onExportSingleProject: (ProjectInventorySummary) -> Unit,
     onExportMasterCsv: () -> Unit,
     onExportAllZip: () -> Unit,
@@ -42,6 +45,9 @@ fun InListingsScreen(
     modifier: Modifier = Modifier
 ) {
     var selectedTabFilter by remember { mutableStateOf("ALL") } // "ALL", "ACTIVE", "EMPTY"
+    var showAddDialog by remember { mutableStateOf(false) }
+    var newSocietyName by remember { mutableStateOf("") }
+    var newSocietyAliases by remember { mutableStateOf("") }
 
     val filteredProjects = remember(inProjects, searchQuery, selectedTabFilter) {
         inProjects.filter { proj ->
@@ -61,6 +67,76 @@ fun InListingsScreen(
     }
     val projectsWithInventory = remember(inProjects) {
         inProjects.count { it.totalListings > 0 }
+    }
+
+    if (showAddDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showAddDialog = false
+                newSocietyName = ""
+                newSocietyAliases = ""
+            },
+            title = {
+                Text(
+                    text = "Add Target Society",
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                    Text(
+                        text = "Add a society to your curated IN portfolio. Messages mentioning this society will be tracked and included in Sub-Excel exports.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = newSocietyName,
+                        onValueChange = { newSocietyName = it },
+                        label = { Text("Society Name") },
+                        placeholder = { Text("e.g. Godrej Aristocrat") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = newSocietyAliases,
+                        onValueChange = { newSocietyAliases = it },
+                        label = { Text("Aliases / Keywords (optional)") },
+                        placeholder = { Text("e.g. Aristocrat, Godrej 49") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val cleanName = newSocietyName.trim().uppercase()
+                        if (cleanName.isNotBlank()) {
+                            val aliasesList = newSocietyAliases.split(",").map { it.trim() }.filter { it.isNotBlank() }
+                            onAddSociety(cleanName, aliasesList)
+                            showAddDialog = false
+                            newSocietyName = ""
+                            newSocietyAliases = ""
+                        }
+                    },
+                    enabled = newSocietyName.isNotBlank()
+                ) {
+                    Text("Add to IN")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = {
+                        showAddDialog = false
+                        newSocietyName = ""
+                        newSocietyAliases = ""
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     Scaffold(
@@ -85,6 +161,16 @@ fun InListingsScreen(
                     }
                 },
                 actions = {
+                    FilledTonalButton(
+                        onClick = { showAddDialog = true },
+                        shape = RoundedCornerShape(Spacing.sm),
+                        contentPadding = PaddingValues(horizontal = Spacing.sm),
+                        modifier = Modifier.height(36.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Add", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                    }
                     IconButton(onClick = onRefresh) {
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh IN List")
                     }
@@ -180,7 +266,7 @@ fun InListingsScreen(
                             )
                         }
                         Text(
-                            text = "All 54 curated societies are loaded. Tap below to scan your decrypted WhatsApp chats and extract active property listings.",
+                            text = "All ${inProjects.size} curated societies are loaded. Tap below to scan your decrypted WhatsApp chats and extract active property listings.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -430,7 +516,8 @@ fun InListingsScreen(
                     items(filteredProjects, key = { it.society }) { project ->
                         CuratedPropertyCard(
                             project = project,
-                            onExportSubExcel = { onExportSingleProject(project) }
+                            onExportSubExcel = { onExportSingleProject(project) },
+                            onRemoveCustom = { onRemoveCustomSociety(project.society) }
                         )
                     }
                 }
@@ -443,9 +530,11 @@ fun InListingsScreen(
 private fun CuratedPropertyCard(
     project: ProjectInventorySummary,
     onExportSubExcel: () -> Unit,
+    onRemoveCustom: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val hasListings = project.totalListings > 0
+    val isCustom = remember(project.society) { ProjectRegistry.isCustomProject(project.society) }
 
     ElevatedCard(
         modifier = modifier.fillMaxWidth(),
@@ -492,14 +581,31 @@ private fun CuratedPropertyCard(
                 }
 
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = project.society,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = project.society,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        if (isCustom) {
+                            Spacer(Modifier.width(Spacing.xs))
+                            Surface(
+                                color = MaterialTheme.colorScheme.tertiaryContainer,
+                                shape = RoundedCornerShape(Spacing.xxs)
+                            ) {
+                                Text(
+                                    text = "Custom",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    modifier = Modifier.padding(horizontal = Spacing.xxs, vertical = 1.dp)
+                                )
+                            }
+                        }
+                    }
 
                     Spacer(Modifier.height(Spacing.xxs))
 
@@ -551,24 +657,41 @@ private fun CuratedPropertyCard(
 
             Spacer(Modifier.width(Spacing.xs))
 
-            // Export Sub-Excel Action Button (accessible 40dp height, thumb tap friendly)
-            FilledTonalButton(
-                onClick = onExportSubExcel,
-                shape = RoundedCornerShape(Spacing.sm),
-                contentPadding = PaddingValues(horizontal = Spacing.sm, vertical = Spacing.xs),
-                modifier = Modifier.height(40.dp)
-            ) {
-                Icon(
-                    Icons.Default.FileDownload,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(Modifier.width(Spacing.xxs))
-                Text(
-                    text = "Sub-Excel",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Export Sub-Excel Action Button
+                FilledTonalButton(
+                    onClick = onExportSubExcel,
+                    shape = RoundedCornerShape(Spacing.sm),
+                    contentPadding = PaddingValues(horizontal = Spacing.sm, vertical = Spacing.xs),
+                    modifier = Modifier.height(40.dp)
+                ) {
+                    Icon(
+                        Icons.Default.FileDownload,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(Spacing.xxs))
+                    Text(
+                        text = "Sub-Excel",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                if (isCustom) {
+                    Spacer(Modifier.width(Spacing.xxs))
+                    IconButton(
+                        onClick = onRemoveCustom,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteOutline,
+                            contentDescription = "Remove Custom Society",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
             }
         }
     }

@@ -28,6 +28,7 @@ enum class Screen {
     PROGRESS,
     PROJECTS,
     IN_LISTINGS,
+    OUT_LISTINGS,
     SETTINGS
 }
 
@@ -77,6 +78,11 @@ class MainActivity : ComponentActivity() {
                     val inListingsSearchQuery by viewModel.inListingsSearchQuery.collectAsStateWithLifecycle()
                     val isLoadingInListings by viewModel.isLoadingInListings.collectAsStateWithLifecycle()
 
+                    // OUT Listings States
+                    val outProjectSummaries by viewModel.outProjectSummaries.collectAsStateWithLifecycle()
+                    val outListingsSearchQuery by viewModel.outListingsSearchQuery.collectAsStateWithLifecycle()
+                    val isLoadingOutListings by viewModel.isLoadingOutListings.collectAsStateWithLifecycle()
+
                     // Helper to share files
                     fun shareFile(file: File, mimeType: String, subject: String, title: String) {
                         val fileUri = androidx.core.content.FileProvider.getUriForFile(
@@ -97,6 +103,7 @@ class MainActivity : ComponentActivity() {
                     BackHandler {
                         when (currentScreen) {
                             Screen.SETTINGS -> currentScreen = Screen.PROJECTS
+                            Screen.OUT_LISTINGS -> currentScreen = Screen.PROJECTS
                             Screen.IN_LISTINGS -> currentScreen = Screen.PROJECTS
                             Screen.PROJECTS -> finish()
                             Screen.PROGRESS -> {
@@ -162,7 +169,7 @@ class MainActivity : ComponentActivity() {
                         InventoryExportState.Idle -> {}
                     }
 
-                    val isDashboard = currentScreen == Screen.PROJECTS || currentScreen == Screen.IN_LISTINGS
+                    val isDashboard = currentScreen == Screen.PROJECTS || currentScreen == Screen.IN_LISTINGS || currentScreen == Screen.OUT_LISTINGS
 
                     Scaffold(
                         bottomBar = {
@@ -212,6 +219,26 @@ class MainActivity : ComponentActivity() {
                                              Text(
                                                  "IN Listings",
                                                  fontWeight = if (currentScreen == Screen.IN_LISTINGS) FontWeight.Bold else FontWeight.Normal
+                                             )
+                                        },
+                                        colors = navColors
+                                    )
+                                    NavigationBarItem(
+                                        selected = currentScreen == Screen.OUT_LISTINGS,
+                                        onClick = {
+                                             currentScreen = Screen.OUT_LISTINGS
+                                             viewModel.loadOutListings(this@MainActivity)
+                                        },
+                                        icon = {
+                                             Icon(
+                                                 Icons.Default.TravelExplore,
+                                                 contentDescription = "OUT Listings"
+                                             )
+                                        },
+                                        label = {
+                                             Text(
+                                                 "OUT Listings",
+                                                 fontWeight = if (currentScreen == Screen.OUT_LISTINGS) FontWeight.Bold else FontWeight.Normal
                                              )
                                         },
                                         colors = navColors
@@ -295,6 +322,12 @@ class MainActivity : ComponentActivity() {
                                         onScanProjects = {
                                             viewModel.scanProjectInventory(this@MainActivity, projectMonths, forceRefresh = true)
                                         },
+                                        onAddSociety = { name, aliases ->
+                                            viewModel.addManualInSociety(name, aliases, this@MainActivity)
+                                        },
+                                        onRemoveCustomSociety = { name ->
+                                            viewModel.removeCustomInSociety(name, this@MainActivity)
+                                        },
                                         onExportSingleProject = { proj ->
                                             viewModel.exportSingleProjectSubExcel(this@MainActivity, proj, projectMonths) { shareFile ->
                                                 shareFile(shareFile, "text/csv", "Sub-Excel: ${proj.society}", "Share ${proj.society} Sub-Excel")
@@ -312,6 +345,26 @@ class MainActivity : ComponentActivity() {
                                         },
                                         onRefresh = {
                                             viewModel.loadInListings(this@MainActivity)
+                                        },
+                                        onNavigateToSettings = {
+                                            currentScreen = Screen.SETTINGS
+                                        }
+                                    )
+                                }
+
+                                Screen.OUT_LISTINGS -> {
+                                    OutListingsScreen(
+                                        outProjects = outProjectSummaries,
+                                        isLoading = isLoadingOutListings,
+                                        isScanning = isProjectScanning,
+                                        scanProgress = projectScanProgress,
+                                        searchQuery = outListingsSearchQuery,
+                                        onSearchQueryChanged = viewModel::onOutListingsSearchQueryChanged,
+                                        onPromoteSociety = { society ->
+                                            viewModel.promoteOutSocietyToIn(society, this@MainActivity)
+                                        },
+                                        onRefresh = {
+                                            viewModel.loadOutListings(this@MainActivity)
                                         },
                                         onNavigateToSettings = {
                                             currentScreen = Screen.SETTINGS

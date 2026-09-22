@@ -223,7 +223,7 @@ class StreamingInventoryStore(private val work: InventorySql, private val cache:
             map
         }
 
-        return ProjectRegistry.SELECTED_PROJECT_NAMES.map { canonicalName ->
+        return ProjectRegistry.getAllTargetProjectNames().map { canonicalName ->
             val info = existingSummaries[canonicalName]
             ProjectInventorySummary(
                 society = canonicalName,
@@ -233,6 +233,71 @@ class StreamingInventoryStore(private val work: InventorySql, private val cache:
                 latestTimestamp = info?.third ?: 0L
             )
         }
+    }
+
+    fun getOutProjectSummaries(): List<ProjectInventorySummary> {
+        val inSocieties = ProjectRegistry.getAllTargetProjectNames().map { it.uppercase() }.toSet()
+        return work.query("""
+            SELECT society, COUNT(*), COUNT(DISTINCT dealer), MAX(ts)
+            FROM listings
+            WHERE status = 'OUT'
+            GROUP BY society
+            HAVING COUNT(*) > 0
+            ORDER BY COUNT(*) DESC, society ASC
+        """) { cursor ->
+            val list = mutableListOf<ProjectInventorySummary>()
+            while (cursor.next()) {
+                val soc = cursor.text(0).trim()
+                if (soc.isNotBlank() && soc.uppercase() !in inSocieties) {
+                    list.add(
+                        ProjectInventorySummary(
+                            society = soc,
+                            status = "OUT",
+                            totalListings = cursor.long(1).toInt(),
+                            uniqueDealers = cursor.long(2).toInt(),
+                            latestTimestamp = cursor.long(3)
+                        )
+                    )
+                }
+            }
+            list
+        }
+    }
+
+    fun promoteSocietyToIn(society: String): Int {
+        var count = 0
+        work.execute("BEGIN IMMEDIATE")
+        try {
+            work.execute("UPDATE listings SET status = 'IN' WHERE society = ?", listOf(society))
+            work.execute("COMMIT")
+        } catch (e: Exception) {
+            try { work.execute("ROLLBACK") } catch (_: Exception) {}
+            throw e
+        }
+        work.query("SELECT COUNT(*) FROM listings WHERE society = ? AND status = 'IN'", listOf(society)) { cursor ->
+            if (cursor.next()) {
+                count = cursor.long(0).toInt()
+            }
+        }
+        return count
+    }
+
+    fun demoteSocietyToOut(society: String): Int {
+        var count = 0
+        work.execute("BEGIN IMMEDIATE")
+        try {
+            work.execute("UPDATE listings SET status = 'OUT' WHERE society = ?", listOf(society))
+            work.execute("COMMIT")
+        } catch (e: Exception) {
+            try { work.execute("ROLLBACK") } catch (_: Exception) {}
+            throw e
+        }
+        work.query("SELECT COUNT(*) FROM listings WHERE society = ? AND status = 'OUT'", listOf(society)) { cursor ->
+            if (cursor.next()) {
+                count = cursor.long(0).toInt()
+            }
+        }
+        return count
     }
 
     fun forEachRowForProject(society: String, consume: (ImportantDealerRow) -> Unit) {
@@ -331,8 +396,11 @@ class StreamingInventoryStore(private val work: InventorySql, private val cache:
         } else {
             row.fullMessage
         }
+        val finalStatus = row.projectListStatus.ifBlank {
+            if (ProjectRegistry.isSelectedProject(row.society)) "IN" else "OUT"
+        }
         val inRow = row.copy(
-            projectListStatus = "IN",
+            projectListStatus = finalStatus,
             fullMessage = fullMsg
         )
         val encoded = json.encodeToString(inRow)
@@ -340,7 +408,7 @@ class StreamingInventoryStore(private val work: InventorySql, private val cache:
         try {
             work.execute(
                 "INSERT INTO listings (dedup_key, ts, seq, society, dealer, status, fields) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                listOf(key, timestamp, seq, inRow.society, inRow.dealerName, inRow.projectListStatus, encoded)
+                listOf(key, timestamp, seq, inRow.society, inRow.dealerName, finalStatus, encoded)
             )
             work.execute("COMMIT")
         } catch (e: Exception) {

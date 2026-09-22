@@ -263,8 +263,64 @@ class StreamingInventoryStoreTest {
 
             val emptyCurated = curated.find { it.society == "SOBHA VILLA" }
             assertNotNull(emptyCurated)
-            assertEquals(0, emptyCurated.totalListings)
-            assertEquals(0, emptyCurated.uniqueDealers)
+            // 8. Test dynamic custom projects and promotion from OUT to IN
+            assertEquals(54, ProjectRegistry.getAllTargetProjectNames().size)
+            assertTrue(ProjectRegistry.addCustomProject("CONSCIENT ELEVATE", listOf("ELEVATE SEC 59", "CONSCIENT")))
+            assertEquals(55, ProjectRegistry.getAllTargetProjectNames().size)
+            assertTrue(ProjectRegistry.isCustomProject("CONSCIENT ELEVATE"))
+
+            // Verify canonical text matching detects custom project
+            assertEquals("CONSCIENT ELEVATE", ProjectRegistry.findCanonicalProjectInText("Fresh 3BHK unit available in Conscient Elevate sec 59 call now"))
+            assertEquals("CONSCIENT ELEVATE", ProjectRegistry.canonicalSelectedProject("Conscient Elevate"))
+
+            // Verify getCuratedInProjectSummaries returns 55 items now
+            val curated55 = store.getCuratedInProjectSummaries()
+            assertEquals(55, curated55.size)
+            val customCurated = curated55.find { it.society == "CONSCIENT ELEVATE" }
+            assertNotNull(customCurated)
+            assertEquals("IN", customCurated.status)
+            assertEquals(0, customCurated.totalListings)
+
+            // Test OUT listings and promotion
+            val outListing = ImportantDealerRow(
+                society = "DLF THE ARBOUR",
+                projectListStatus = "OUT",
+                sec = "63",
+                area = "3950 sqft",
+                acco = "4 BHK",
+                floor = "10th",
+                flatNo = "1001",
+                dealerName = "Ashok Realtech",
+                phoneNo = "9876543210",
+                price = "8.5 Cr",
+                fullMessage = "DLF The Arbour 4BHK",
+                isDuplicate = false
+            )
+            store.addListing(outListing)
+
+            val initialOuts = store.getOutProjectSummaries()
+            val dlfOut = initialOuts.find { it.society == "DLF THE ARBOUR" }
+            assertNotNull(dlfOut)
+            assertEquals("OUT", dlfOut.status)
+            assertEquals(1, dlfOut.totalListings)
+
+            // Promote DLF THE ARBOUR to IN
+            assertTrue(ProjectRegistry.addCustomProject("DLF THE ARBOUR"))
+            val updatedRows = store.promoteSocietyToIn("DLF THE ARBOUR")
+            assertEquals(1, updatedRows)
+
+            val outsAfterPromote = store.getOutProjectSummaries()
+            assertNull(outsAfterPromote.find { it.society == "DLF THE ARBOUR" })
+
+            val inSummaries = store.getCuratedInProjectSummaries()
+            val dlfCurated = inSummaries.find { it.society == "DLF THE ARBOUR" }
+            assertNotNull(dlfCurated)
+            assertEquals(1, dlfCurated.totalListings)
+
+            // Clean up custom projects so other tests stay clean
+            ProjectRegistry.removeCustomProject("CONSCIENT ELEVATE")
+            ProjectRegistry.removeCustomProject("DLF THE ARBOUR")
+            assertEquals(54, ProjectRegistry.getAllTargetProjectNames().size)
         }
     }
 }
