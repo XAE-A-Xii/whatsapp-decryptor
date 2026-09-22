@@ -1,15 +1,11 @@
 package com.privacy.whatsappdecryptor.ui
 
 import android.content.Context
-import android.net.Uri
 import android.os.Bundle
 import android.view.WindowManager
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -20,17 +16,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.lifecycleScope
-import com.privacy.whatsappdecryptor.core.database.model.ChatSummary
 import com.privacy.whatsappdecryptor.core.service.DecryptionForegroundService
-import com.privacy.whatsappdecryptor.core.service.DecryptionProgressState
 import com.privacy.whatsappdecryptor.ui.screens.*
 import com.privacy.whatsappdecryptor.ui.theme.WhatsAppDecryptorTheme
 import com.privacy.whatsappdecryptor.ui.viewmodel.ChatViewModel
-import com.privacy.whatsappdecryptor.ui.viewmodel.DatabaseState
-import com.privacy.whatsappdecryptor.ui.viewmodel.ExportFormat
 import com.privacy.whatsappdecryptor.ui.viewmodel.InventoryExportState
-import kotlinx.coroutines.launch
 import java.io.File
 
 enum class Screen {
@@ -38,8 +28,6 @@ enum class Screen {
     PROGRESS,
     PROJECTS,
     IN_LISTINGS,
-    CHAT_LIST,
-    CHAT_DETAIL,
     SETTINGS
 }
 
@@ -73,19 +61,7 @@ class MainActivity : ComponentActivity() {
                     var currentScreen by remember { mutableStateOf(initialScreen) }
                     var privacyModeEnabled by remember { mutableStateOf(privacyMode) }
 
-                    // Export State
-                    var exportPendingChat by remember { mutableStateOf<ChatSummary?>(null) }
-                    var activeExportFormat by remember { mutableStateOf(ExportFormat.TXT) }
-                    var showExportDialog by remember { mutableStateOf(false) }
-
                     val progressState by DecryptionForegroundService.progressState.collectAsStateWithLifecycle()
-                    val chats by viewModel.chats.collectAsStateWithLifecycle()
-                    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
-                    val onlyGroups by viewModel.onlyGroups.collectAsStateWithLifecycle()
-                    val selectedChat by viewModel.selectedChat.collectAsStateWithLifecycle()
-                    val messages by viewModel.messages.collectAsStateWithLifecycle()
-                    val isLoadingMessages by viewModel.isLoadingMessages.collectAsStateWithLifecycle()
-                    val selectedChatIds by viewModel.selectedChatIdsForExport.collectAsStateWithLifecycle()
                     val inventoryExportState by viewModel.inventoryExportState.collectAsStateWithLifecycle()
 
                     // Project Inventory States
@@ -99,7 +75,6 @@ class MainActivity : ComponentActivity() {
                     // IN Listings States
                     val inProjectSummaries by viewModel.inProjectSummaries.collectAsStateWithLifecycle()
                     val inListingsSearchQuery by viewModel.inListingsSearchQuery.collectAsStateWithLifecycle()
-                    val inListingsSocietyFilter by viewModel.inListingsSocietyFilter.collectAsStateWithLifecycle()
                     val isLoadingInListings by viewModel.isLoadingInListings.collectAsStateWithLifecycle()
 
                     // Helper to share files
@@ -118,36 +93,10 @@ class MainActivity : ComponentActivity() {
                         startActivity(android.content.Intent.createChooser(shareIntent, title))
                     }
 
-                    // SAF Document Creator for Exports
-                    val createDocumentLauncher = rememberLauncherForActivityResult(
-                        contract = ActivityResultContracts.CreateDocument(activeExportFormat.mimeType)
-                    ) { uri: Uri? ->
-                        val chatToExport = exportPendingChat
-                        if (uri != null && chatToExport != null) {
-                            lifecycleScope.launch {
-                                try {
-                                    contentResolver.openOutputStream(uri)?.use { os ->
-                                        viewModel.exportChat(chatToExport, activeExportFormat, os)
-                                    }
-                                    Toast.makeText(this@MainActivity, "Chat exported successfully!", Toast.LENGTH_SHORT).show()
-                                } catch (e: Exception) {
-                                    Toast.makeText(this@MainActivity, "Export failed: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
-                                } finally {
-                                    exportPendingChat = null
-                                }
-                            }
-                        }
-                    }
-
                     // Back Handler Navigation
                     BackHandler {
                         when (currentScreen) {
                             Screen.SETTINGS -> currentScreen = Screen.PROJECTS
-                            Screen.CHAT_DETAIL -> {
-                                viewModel.clearSelectedChat()
-                                currentScreen = Screen.CHAT_LIST
-                            }
-                            Screen.CHAT_LIST -> currentScreen = Screen.PROJECTS
                             Screen.IN_LISTINGS -> currentScreen = Screen.PROJECTS
                             Screen.PROJECTS -> finish()
                             Screen.PROGRESS -> {
@@ -156,24 +105,6 @@ class MainActivity : ComponentActivity() {
                             }
                             Screen.SETUP -> finish()
                         }
-                    }
-
-                    // Export Dialog
-                    if (showExportDialog && exportPendingChat != null) {
-                        ExportDialog(
-                            exportTargetDescription = "Exporting chat: \"${exportPendingChat?.title}\"",
-                            onDismiss = {
-                                showExportDialog = false
-                                exportPendingChat = null
-                            },
-                            onConfirmExport = { format ->
-                                activeExportFormat = format
-                                showExportDialog = false
-                                val sanitizedTitle = exportPendingChat?.title?.replace("[^a-zA-Z0-9_]".toRegex(), "_") ?: "chat"
-                                val fileName = "chat_${sanitizedTitle}_export.${format.extension}"
-                                createDocumentLauncher.launch(fileName)
-                            }
-                        )
                     }
 
                     // Centralized Inventory Export Dialogs (Processing, Complete, Error)
@@ -231,11 +162,11 @@ class MainActivity : ComponentActivity() {
                         InventoryExportState.Idle -> {}
                     }
 
-                    val isDashboard = currentScreen == Screen.PROJECTS || currentScreen == Screen.IN_LISTINGS || currentScreen == Screen.CHAT_LIST
+                    val isDashboard = currentScreen == Screen.PROJECTS || currentScreen == Screen.IN_LISTINGS
 
                     Scaffold(
                         bottomBar = {
-                            if (isDashboard && selectedChatIds.isEmpty()) {
+                            if (isDashboard) {
                                 NavigationBar(
                                     containerColor = MaterialTheme.colorScheme.surfaceContainer,
                                     tonalElevation = 4.dp
@@ -281,23 +212,6 @@ class MainActivity : ComponentActivity() {
                                              Text(
                                                  "IN Listings",
                                                  fontWeight = if (currentScreen == Screen.IN_LISTINGS) FontWeight.Bold else FontWeight.Normal
-                                             )
-                                        },
-                                        colors = navColors
-                                    )
-                                    NavigationBarItem(
-                                        selected = currentScreen == Screen.CHAT_LIST,
-                                        onClick = { currentScreen = Screen.CHAT_LIST },
-                                        icon = {
-                                             Icon(
-                                                 Icons.Default.Chat,
-                                                 contentDescription = "Chats"
-                                             )
-                                        },
-                                        label = {
-                                             Text(
-                                                 "Chats",
-                                                 fontWeight = if (currentScreen == Screen.CHAT_LIST) FontWeight.Bold else FontWeight.Normal
                                              )
                                         },
                                         colors = navColors
@@ -405,59 +319,6 @@ class MainActivity : ComponentActivity() {
                                     )
                                 }
 
-                                Screen.CHAT_LIST -> {
-                                    ChatListScreen(
-                                        chats = chats,
-                                        searchQuery = searchQuery,
-                                        onSearchQueryChanged = viewModel::onSearchQueryChanged,
-                                        onlyGroups = onlyGroups,
-                                        onFilterGroupsChanged = viewModel::onFilterGroupsChanged,
-                                        selectedChatIds = selectedChatIds,
-                                        onToggleChatSelection = viewModel::toggleChatSelection,
-                                        onSelectAll = viewModel::selectAllChats,
-                                        onClearSelection = viewModel::clearSelection,
-                                        onChatClicked = { chat ->
-                                            viewModel.selectChat(chat)
-                                            currentScreen = Screen.CHAT_DETAIL
-                                        },
-                                        onNavigateToSettings = {
-                                            currentScreen = Screen.SETTINGS
-                                        },
-                                        onNavigateToProjects = {
-                                            currentScreen = Screen.PROJECTS
-                                        },
-                                        onExportSelected = {
-                                            val firstSelectedId = selectedChatIds.firstOrNull()
-                                            val chat = chats.firstOrNull { it.id == firstSelectedId }
-                                            if (chat != null) {
-                                                exportPendingChat = chat
-                                                showExportDialog = true
-                                            }
-                                        }
-                                    )
-                                }
-
-                                Screen.CHAT_DETAIL -> {
-                                    val activeChat = selectedChat
-                                    if (activeChat != null) {
-                                        ChatDetailScreen(
-                                            chat = activeChat,
-                                            messages = messages,
-                                            isLoading = isLoadingMessages,
-                                            onBack = {
-                                                viewModel.clearSelectedChat()
-                                                currentScreen = Screen.CHAT_LIST
-                                            },
-                                            onExportChat = {
-                                                exportPendingChat = activeChat
-                                                showExportDialog = true
-                                            }
-                                        )
-                                    } else {
-                                        currentScreen = Screen.CHAT_LIST
-                                    }
-                                }
-
                                 Screen.SETTINGS -> {
                                     SettingsScreen(
                                         decryptedFile = File(noBackupFilesDir, "msgstore_decrypted.db"),
@@ -472,7 +333,7 @@ class MainActivity : ComponentActivity() {
                                             currentScreen = Screen.SETUP
                                         },
                                         onBack = {
-                                            currentScreen = Screen.CHAT_LIST
+                                            currentScreen = Screen.PROJECTS
                                         }
                                     )
                                 }
