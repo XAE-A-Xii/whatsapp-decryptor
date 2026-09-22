@@ -374,8 +374,13 @@ class MainActivity : ComponentActivity() {
                                     InListingsScreen(
                                         inProjects = inProjectSummaries,
                                         isLoading = isLoadingInListings,
+                                        isScanning = isProjectScanning,
+                                        scanProgress = projectScanProgress,
                                         searchQuery = inListingsSearchQuery,
                                         onSearchQueryChanged = { viewModel.onInListingsSearchQueryChanged(it, this@MainActivity) },
+                                        onScanProjects = {
+                                            viewModel.scanProjectInventory(this@MainActivity, projectMonths, forceRefresh = true)
+                                        },
                                         onExportSingleProject = { proj ->
                                             viewModel.exportSingleProjectSubExcel(this@MainActivity, proj, projectMonths) { shareFile ->
                                                 shareFile(shareFile, "text/csv", "Sub-Excel: ${proj.society}", "Share ${proj.society} Sub-Excel")

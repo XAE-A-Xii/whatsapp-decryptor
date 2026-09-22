@@ -29,8 +29,11 @@ private val ListingDateFormatter = DateTimeFormatter.ofPattern("MMM d, yyyy")
 fun InListingsScreen(
     inProjects: List<ProjectInventorySummary>,
     isLoading: Boolean,
+    isScanning: Boolean = false,
+    scanProgress: String = "",
     searchQuery: String,
     onSearchQueryChanged: (String) -> Unit,
+    onScanProjects: () -> Unit = {},
     onExportSingleProject: (ProjectInventorySummary) -> Unit,
     onExportMasterCsv: () -> Unit,
     onExportAllZip: () -> Unit,
@@ -101,6 +104,108 @@ fun InListingsScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
+            // Scanning Status / Progress Banner
+            if (isScanning) {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer
+                    ),
+                    shape = RoundedCornerShape(Spacing.md),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.md, vertical = Spacing.xs)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(Spacing.md),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "Extracting Listings from WhatsApp Messages…",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        LinearProgressIndicator(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(Spacing.xs)
+                                .clip(RoundedCornerShape(Spacing.xxs)),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = scanProgress.ifEmpty { "Scanning and deduplicating property listings…" },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            } else if (totalActiveListings == 0) {
+                // Not yet scanned banner
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                    ),
+                    shape = RoundedCornerShape(Spacing.md),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.md, vertical = Spacing.xs)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(Spacing.md),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                        ) {
+                            Icon(
+                                Icons.Default.Info,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = "Messages Not Scanned Yet",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Text(
+                            text = "All 54 curated societies are loaded. Tap below to scan your decrypted WhatsApp chats and extract active property listings.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Button(
+                            onClick = onScanProjects,
+                            shape = RoundedCornerShape(Spacing.sm),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary
+                            )
+                        ) {
+                            Icon(
+                                Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(Spacing.xs))
+                            Text("Scan Messages Now", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
             // Global Export & Overview Hero Card (60/30/10 structure)
             Card(
                 colors = CardDefaults.cardColors(
@@ -287,13 +392,15 @@ fun InListingsScreen(
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            text = if (searchQuery.isNotEmpty()) {
-                                "No curated property matches \"$searchQuery\"."
-                            } else {
-                                "No properties match the selected filter."
+                            text = when {
+                                searchQuery.isNotEmpty() -> "No curated property matches \"$searchQuery\"."
+                                selectedTabFilter == "ACTIVE" && projectsWithInventory == 0 ->
+                                    "No societies have extracted listings yet. Tap 'Scan Messages Now' above to extract listings from your chats."
+                                else -> "No properties match the selected filter."
                             },
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                         if (searchQuery.isNotEmpty()) {
                             Button(
@@ -302,6 +409,14 @@ fun InListingsScreen(
                                 modifier = Modifier.height(48.dp)
                             ) {
                                 Text("Clear Search")
+                            }
+                        } else if (selectedTabFilter != "ALL") {
+                            OutlinedButton(
+                                onClick = { selectedTabFilter = "ALL" },
+                                shape = RoundedCornerShape(Spacing.sm),
+                                modifier = Modifier.height(48.dp)
+                            ) {
+                                Text("Show All Societies")
                             }
                         }
                     }

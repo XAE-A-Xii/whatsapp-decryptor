@@ -225,6 +225,9 @@ class ChatViewModel : ViewModel() {
         val databaseFile = (_dbState.value as? DatabaseState.Ready)?.file
         val listingsDb = databaseFile?.let { File(it.parentFile, "active_inventory/listings_${months}m.db") }
         if (listingsDb == null || !listingsDb.exists()) {
+            if (databaseFile != null && databaseFile.exists() && inventoryJob?.isActive != true) {
+                scanProjectInventory(appContext, months, forceRefresh = false)
+            }
             return
         }
 
@@ -477,6 +480,7 @@ class ChatViewModel : ViewModel() {
                     AndroidInventorySql(parsedCacheDb).use { cache ->
                         StreamingInventoryStore(work, cache).use { store ->
                             _projectSummaries.value = store.getProjectSummaries()
+                            _inProjectSummaries.value = store.getCuratedInProjectSummaries()
                             _inListings.value = store.getInListings(
                                 searchQuery = _inListingsSearchQuery.value.takeIf { it.isNotBlank() },
                                 societyFilter = _inListingsSocietyFilter.value
